@@ -1,4 +1,4 @@
-Geneset merge script for Apollo annotations
+# Geneset merge script for Apollo annotations
 ============================================
 
 ## Project description
