@@ -12,7 +12,10 @@ It outputs a GFF3 file with the genes that should go on the merged dataset and a
 The software expects a directory for each species with 3 files cap.gff, cap.fasta, core.gff. Each species directory name should be listed on a file (speciesList parameter).
 Bioperl and the gene_model_diff/modules must be included as perl libraries.
 
-To run the software: perl run_gene_model_diff.pl --config gene_model_diff.conf --speciesFile list_of_species.txt
+To run the software: 
+```
+perl run_gene_model_diff.pl --config gene_model_diff.conf --speciesFile list_of_species.txt
+````
 This is an early release and the software is still under development. 
 
 ### Known Issues
