@@ -20,4 +20,4 @@ This is an early release and the software is still under development.
 
 ### Known Issues
 
-This Software only works with Bioperl 1.6 (it does not work with 1.7).
+This software only works with Bioperl 1.6 (it does not work with 1.7).
