@@ -120,18 +120,10 @@ sub run_species {
 	my $cap_total_loaded=0;
 	
 	
-	#eval{
-		create_database($config,$species);		
-		$cap_total_loaded = load_data_base($config,$species);
-	#};
-	#if($@){		
-	#	if($run_count < 2 ){
-	#		carp "wait 10 min and re-runing $species \n $@";
-	#		sleep(600);
-	#		$run_count++;
-	#		run_species($species,$run_count);
-	#	}else{ carp "$species faild \n";}
-	#}
+	
+    create_database($config,$species);		
+	$cap_total_loaded = load_data_base($config,$species);
+	
 	$dbh = get_dbh($config,$species);	
 	if($cap_total_loaded){
 		run_gene_set_comparison($dbh);
@@ -149,7 +141,7 @@ sub load_data_base {
 	my($config,$species) = @_;
 	chomp($config,$species);
 	warn "running load database for $species";
-	#my $db_server = $database_server;
+	
 		
 	my $datadir= $config->val('Data','datadir');
 	
@@ -332,8 +324,9 @@ sub write_gff_to_load {
 			}
 		}elsif($colunms[2] eq 'mRNA'){			
 			my($parent) = $colunms[8]=~/Parent=([\w\-]+)\;/;
-			$parents_hash{$parent} = 1;
+			my($ID) = $colunms[8]=~/ID=([\w\-]+)\;/;
 			if(exists $loaded_hash{$parent}){
+				$parents_hash{$ID} = 1;
 				print $load_gff_fh "$colunms[0]\tVectorBase\t$colunms[2]\t$colunms[3]\t$colunms[4]\t$colunms[5]\t$colunms[6]\t$colunms[7]\t$colunms[8]\n";
 			}		
 		}elsif($colunms[2] eq 'exon' or $colunms[2] eq 'CDS'){
