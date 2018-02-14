@@ -14,6 +14,36 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+=head1 NAME
+
+gene_model_diff.pl - Merging two genesets
+
+=head1 SYNOPSIS
+
+gene_model_diff.pl [options]
+
+	Options:
+		--config		server and directory specification file
+		--speciesFile		list of species text file
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--config>
+
+Configuration file with database connectivity details and working directories specifications
+
+=item B<--speciesFile>
+
+Text file with list of species name that are also the name of the subdirectories with the GFF and Fasta files are located
+
+=back
+
+=head1 DESCRIPTION
+
+B<This program> will read a fasta file and two GFF files (the original and and updated geneset) and produces a GFF file with the merged geneset and a file with genes ids to delete from the original geneset.
+
 =cut
 
 use strict;
@@ -32,7 +62,7 @@ use AnnotationEvents;
 use Initialize;
 use Config::IniFiles;
 use Getopt::Long;
-
+use Pod::Usage;
 
 
 my $event_new_count;
@@ -55,7 +85,7 @@ my $dbh;
 my %options;
 my $result = GetOptions(\%options,
 		'config|f=s',
-		'speciesFile=s');
+		'speciesFile=s') || pod2usage(2);
 #------------------------------------------------#
 
 my $config = readConfig($options{config});
@@ -395,3 +425,7 @@ sub get_dbh {
 	
 	return $dbh;
 }
+
+
+
+
