@@ -104,6 +104,13 @@ sub find_unmatch_vb_exon {
 	}	
 }
 
+sub get_map_type_for_exon_pair {
+	my($dbh,$cap_exon,$vb_exon)= @_;
+	my $sql = "select map_type from exon_mappings where cap_exon_id = \'$cap_exon\' and vb_exon_id = \'$vb_exon\'";
+	my $array_ref = _submit_sql($dbh,$sql);
+	return $array_ref->[0]->[0];
+}
+
 sub get_exon_mappings_by_id {
 	my($dbh,$exon_type,$id) = @_;
 	

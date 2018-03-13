@@ -62,10 +62,14 @@ sub get_changed_genes {
 	my $gene_count=0;
 	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
 	
+	my @maptypes = qw(exon_boundary exon_number CDS_change gain_iso_form lost_iso_form);
+	my @changed_genes;
 	
-	my $changed_gene_aref = GeneMapping::get_gene_mappings_by_maptype($dbh,'change');
+	foreach my $maptype (@maptypes){
+		push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh,$maptype);};	
+	}
 	
-	foreach my $row (@{$changed_gene_aref}){
+	foreach my $row (@changed_genes){
 			my $vb_gene_id  = $row->[1];
 		    my $cap_gene_id = $row->[0];
 			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'change_gene');

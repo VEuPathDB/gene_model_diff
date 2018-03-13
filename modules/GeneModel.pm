@@ -35,6 +35,27 @@ my %return_types = ("gene"        => "2",
 			 		"gene_model" => "0..2"
 				   );
 
+sub get_transcripts_by_gene_id {
+	my ($dbh,$gene_id,$source) = @_;
+	my $array_ref = GeneModel::get_distinct_id_by_id($dbh,'gene',$gene_id,'transcript',$source,1);
+	my @transcript_ids;	
+	foreach my $row (@{$array_ref}){
+		push @transcript_ids, $row->[0];	
+	}	
+	return \@transcript_ids;
+
+}
+
+sub get_exons_by_transcript_id {
+	my($dbh,$transcript_id,$source) = @_;
+	my $gene_model_ref = GeneModel::get_gene_model_by_id($dbh,'transcript',$transcript_id,$source);
+	my @exons;
+	foreach my $row (@{$gene_model_ref}){					
+		push @exons,$row->[0];	
+	}
+	return \@exons;
+}
+
 sub get_gene_model_by_id {
 	my($dbh,$type,$id,$source,$return_type,$force_array) = @_;
 	confess("missing parameter to get_gene_model_by_id") unless($dbh and $type and $id);

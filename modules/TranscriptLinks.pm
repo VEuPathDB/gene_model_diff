@@ -1,21 +1,3 @@
-=head1 LICENSE
-
-Copyright [2017] EMBL-European Bioinformatics Institute
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-=cut
-
 package TranscriptLinks;
 
 use strict;
@@ -26,135 +8,153 @@ use Log::Log4perl;
 use GeneModel;
 use lib('.');
 use ExonMapping;
+use CDS;
+
+
+=head2 get_overlapping_exons
+
+ Title:    work_out_transcript_links	
+ Usage:    TranscriptLinks::work_out_transcript_links().	
+ Function: Foreach cluster of genes, pair the transcript from the two genesets
+ Returns:  Populates the transcript_links table. 	
+ Args:     Database handle
+=cut 
 
 sub work_out_transcript_links {
 	my($dbh) = @_;
-	
-	my $gene_clusters = GeneClusters::get_distinct_cluster_ids($dbh);
 	my $insert_transcript_links_sth = $dbh->prepare(get_sql('insert_transcript_links'));
-	foreach my $cluster_row (@{$gene_clusters}){
-		my($cluster_id) = @{$cluster_row};
-		my $cluster_summary = GeneClusters::get_cluster_summary_by_id($dbh,$cluster_id);
-		my($cap_gene_count,$cap_transcript_count,$vb_gene_count,$vb_transcript_count) = @{$cluster_summary->[0]};
-		
-		if($cap_gene_count == 1 and $vb_gene_count == 1 and ($cap_transcript_count > 1 or $vb_transcript_count > 1)){
-				  link_matched_transcripts($dbh,$cluster_id);
-		}elsif($cap_gene_count > 0 and $vb_gene_count > 0){ 
-				link_overlapping_transcripts($dbh,$cluster_id);		
-		}elsif($cap_gene_count == 1 and $vb_gene_count == 0){ #New Gene
-				my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-				my($gene_id,$source) = @{$cluster_ref->[0]};
-				my $transcript_ref = GeneModel::get_distinct_id_by_id($dbh,'gene',$gene_id,'transcript',$source,1);
-				foreach my $row (@{$transcript_ref}){
-					my ($transcript_id) = @{$row};
-					$insert_transcript_links_sth->execute($transcript_id,undef);
-				}
-		}else{  #Error 
-				croak("Cluster must atleast have one cap gene");
-		}
-	
-	}
-	
-
-}
-
-sub link_matched_transcripts {
-	my($dbh,$cluster_id) = @_;	
-	my $insert_transcript_links_sth = $dbh->prepare(get_sql('insert_transcript_links'));
-	my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-	my %linked_transcripts;
-	my %allready_linked;
-	my %unmapped_transcripts;
-	foreach my $row (@{$cluster_ref}){		
-		my($gene_id,$source) = @{$row};
-		my $transcript_ref = GeneModel::get_distinct_id_by_id($dbh,'gene',$gene_id,'transcript',$source,1);
-		foreach my $row (@{$transcript_ref}){
-			my ($transcript_id) = @{$row};
-			my $transcript_exon_mappings_array_ref = ExonMapping::get_exon_mappings_by_id($dbh,$source,$transcript_id);
-			foreach my $row (@{$transcript_exon_mappings_array_ref}){
-				my($cap_exon_id,$vb_exon_id,$map_type) = @{$row};
-				next unless defined($vb_exon_id);
-				my $cap_transcript_id = GeneModel::get_gene_model_by_id($dbh,'exon',$cap_exon_id,'cap','transcript');
-				my $vb_transcript_id  = GeneModel::get_gene_model_by_id($dbh,'exon',$vb_exon_id,'vb','transcript');
-				my $link_key = "$cap_transcript_id:$vb_transcript_id";
-				
-				if($map_type eq 'identical'){
-					$linked_transcripts{$link_key}++;
-				}								
-			}
-		}
-	}
-	
-	#transcripts is linked to eachother based on most identical exons. 
-	foreach my $link_key (sort {$linked_transcripts{$b} <=> $linked_transcripts{$a}} keys %linked_transcripts ){
-		
-		my($cap_transcript_id,$vb_transcript_id) = split /:/,$link_key;
-		if(!exists $allready_linked{$cap_transcript_id} and !exists $allready_linked{$vb_transcript_id}){
-			$allready_linked{$cap_transcript_id} = 1;
-			$allready_linked{$vb_transcript_id}  = 1;
-			$insert_transcript_links_sth->execute($cap_transcript_id,$vb_transcript_id);
-		}elsif(!exists $unmapped_transcripts{$link_key}){
-			$unmapped_transcripts{$link_key} = $linked_transcripts{$link_key};
-		}
-	}
-	
-	foreach my $link_key (keys %unmapped_transcripts){
-		my($cap_transcript_id,$vb_transcript_id) = split /:/,$link_key;
-		if(!exists $allready_linked{$cap_transcript_id} or !exists $allready_linked{$vb_transcript_id}){
-			$allready_linked{$cap_transcript_id} = 1;
-			$allready_linked{$vb_transcript_id}  = 1;
-			$insert_transcript_links_sth->execute($cap_transcript_id,$vb_transcript_id);
-		}
-	
-	}	
-}
-
-sub link_overlapping_transcripts {
-	my($dbh,$cluster_id) = @_;
-	my $insert_transcript_links_sth = $dbh->prepare(get_sql('insert_transcript_links'));
-	my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-	my %linked_transcripts;
-	foreach my $row (@{$cluster_ref}){
-		
-		my($gene_id,$source) = @{$row};
-		my $transcript_ref = GeneModel::get_distinct_id_by_id($dbh,'gene',$gene_id,'transcript',$source,1);
-		foreach my $row (@{$transcript_ref}){
-			my ($transcript_id) = @{$row};
-			my $transcript_exon_mappings_array_ref = ExonMapping::get_exon_mappings_by_id($dbh,$source,$transcript_id);
-			foreach $row (@{$transcript_exon_mappings_array_ref}){
-				my($cap_exon_id,$vb_exon_id,$map_type) = @{$row};
-				next unless(defined($cap_exon_id) and defined($vb_exon_id));
-				if($cap_exon_id eq 'none' or $vb_exon_id eq 'none'){next;} 
-				my $cap_transcript_id= GeneModel::get_gene_model_by_id($dbh,'exon',$cap_exon_id,'cap','transcript');
-				my $vb_transcript_id = GeneModel::get_gene_model_by_id($dbh,'exon',$vb_exon_id,'vb','transcript');
-				if(! exists $linked_transcripts{$cap_transcript_id}{$vb_transcript_id} ){
-								$linked_transcripts{$cap_transcript_id}{$vb_transcript_id} = $map_type;
-								$insert_transcript_links_sth->execute($cap_transcript_id,$vb_transcript_id);
-				}
+	my $gene_cluster_ids = GeneClusters::get_distinct_cluster_ids($dbh);
+	foreach my $cluster_id (@{$gene_cluster_ids}){
+		my $gene_cluster = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+		my $transcript_pairs = make_transcript_pairs($dbh,$gene_cluster);
+		foreach my $transcript_pair (@{$transcript_pairs}){
+			my $ranks = rank_transcript_pair($dbh,$transcript_pair);
+			my($cap_id,$vb_id) = split /:/,$transcript_pair;
+			next unless($ranks);
+			foreach my $group (keys %{$ranks} ){				
+				$insert_transcript_links_sth->execute($cluster_id,$cap_id,$vb_id,$group,$ranks->{$group}->{rank},$ranks->{$group}->{count},'not_mapped');
 			}
 		}
 	}
 }
 
-sub get_all_linked_transcripts{
-	my($dbh) =@_;
-	my $sql = "select cap_transcript_id,vb_transcript_id from transcript_links;";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	return $array_ref;		
+sub make_transcript_pairs {
+	my($dbh,$gene_cluster) = @_;
+	my @cap;
+	my @vb;
+	my @pairs;
+	foreach my $gene (@{$gene_cluster}){
+		my($gene_id,$source) = @{$gene};
+		my $transcripts = GeneModel::get_transcripts_by_gene_id($dbh,$gene_id,$source);		
+		if($source eq 'cap'){
+			push @cap,@{$transcripts}; 
+		}elsif($source eq 'vb'){
+			push @vb,@{$transcripts};
+		}else{croak("unknown source $source")}
+	}
+	
+	foreach my $cap_id (@cap){	
+		foreach my $vb_id (@vb){
+			push @pairs, "$cap_id:$vb_id";
+		}	
+	}
+	return \@pairs;
+	
+}
+
+sub rank_transcript_pair {
+	my($dbh,$transcript_pair) = @_;
+	my %ranks = (identical     => 1,
+		     exon_boundary  => 2,
+		     exon_number    => 3,
+		     CDS_change => 4
+		     );
+	
+	my %groups = (identical  => 'identical',
+		      included    => 'exon_boundary',
+		      partial_5   => 'exon_boundary',
+		      partial_3   => 'exon_boundary',
+		      spanning    => 'exon_boundary',
+		      add_exon    => 'exon_number',
+		      delete_exon => 'exon_number',
+		      CDS_change  => 'CDS_change'
+		     );	     
+	my %maptype_count;
+	my($cap_transcript_id,$vb_transcript_id) = split/:/,$transcript_pair;
+	my $cap_exons = GeneModel::get_exons_by_transcript_id($dbh,$cap_transcript_id,'cap');
+	my $vb_exons  = GeneModel::get_exons_by_transcript_id($dbh,$vb_transcript_id,'vb');
+	my($exon_maptype_array,$no_exon_maptype_array) = compare_exons($dbh,$cap_exons,$vb_exons);
+	if(scalar @{$exon_maptype_array}){
+		my $cds_status     = compare_cds($dbh,$cap_transcript_id,$vb_transcript_id);
+		
+		foreach my $map_type (@{$exon_maptype_array}){
+			my $group = $groups{$map_type};
+			$maptype_count{$group}{count}++;
+		}
+	
+		foreach my $map_type (@{$no_exon_maptype_array}){
+			my $group = $groups{$map_type};
+			$maptype_count{$group}{count}++;
+		}
+		
+		if($cds_status){
+			$maptype_count{$cds_status}{count} = 1;
+		}
+	
+		foreach my $group (keys %maptype_count){
+			$maptype_count{$group}{rank} = $ranks{$group};
+		}
+		return \%maptype_count;
+	}else{ return undef; }
+	
+
+}
+
+sub compare_exons {
+	my($dbh,$cap_exons,$vb_exons) = @_;
+	my %cap_exon_ids = map {$_ => 1} @{$cap_exons};
+	my %vb_exon_ids  = map {$_ => 1} @{$vb_exons};
+	my @exon_overlap_map_types;
+	my @no_overlap_map_types;
+	foreach my $cap_exon (keys %cap_exon_ids){
+		foreach my $vb_exon (keys %vb_exon_ids){
+			my $map_type = 	ExonMapping::get_map_type_for_exon_pair($dbh,$cap_exon,$vb_exon);
+			if($map_type){
+				push @exon_overlap_map_types, $map_type;
+				delete $cap_exon_ids{$cap_exon};
+				delete $vb_exon_ids{$vb_exon};
+			}			
+		}		 		
+	}
+	
+	foreach my $cap_exon (keys %cap_exon_ids){
+		push @no_overlap_map_types, 'add_exon';
+	}
+	foreach my $vb_exon (keys %vb_exon_ids){
+		push @no_overlap_map_types, 'delete_exon';
+	}
+	
+	return \@exon_overlap_map_types,\@no_overlap_map_types;
+}
+
+
+sub compare_cds {
+	my($dbh,$cap_transcript_id,$vb_transcript_id) = @_;
+	my ($cap_cds_start,$cap_cds_end) = CDS::get_cds_pos_by_parent_id($dbh,$cap_transcript_id);
+	my ($vb_cds_start,$vb_cds_end)   = CDS::get_cds_pos_by_parent_id($dbh,$vb_transcript_id);
+	
+	if($cap_cds_start ne $vb_cds_start or $cap_cds_end ne $vb_cds_end){
+		return 'CDS_change';
+	}else{ return 0; }
+
 }
 
 sub get_sql{
 	my ($sql_name) = @_;
 		
 	if($sql_name eq 'insert_transcript_links'){
-		my $insert_transcript_links = "insert transcript_links(cap_transcript_id,vb_transcript_id) select ?,?";
+		my $insert_transcript_links = "insert transcript_links(gene_cluster_id,cap_transcript_id,vb_transcript_id,link_group,link_rank,group_count,link_status) select ?,?,?,?,?,?,?";
 		return $insert_transcript_links;
-	}elsif($sql_name eq 'get_maped_unlinked_vb_transcripts'){
-		my $maped_unlinked_vb_transcripts = "select distinct transcript_id from gene_model,exon_mappings 
-											 where exon_id =  vb_exon_id
-											 and source = 'vb'
-											 and not exists (select * from transcript_links where vb_transcript_id = transcript_id);";
-	    return $maped_unlinked_vb_transcripts;
-	}	
+	}
 }
 1;
