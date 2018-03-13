@@ -1,21 +1,3 @@
-=head1 LICENSE
-
-Copyright [2017] EMBL-European Bioinformatics Institute
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-=cut
-
 package TranscriptMapping;
 use strict;
 use warnings;
@@ -23,137 +5,163 @@ use autodie qw(:all);
 use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use TranscriptLinks;
-use ExonMapping;
-use CDS;
-
+use Data::Dumper;
 sub resolve_transcript_mappings{
-	my($dbh) = @_;		
-	my $insert_transcript_mappings_sth = $dbh->prepare(get_sql('insert_transcript_mappings'));
-		
-	my $linked_transcript_array_ref = TranscriptLinks::get_all_linked_transcripts($dbh);
-	foreach my $linked_pair (@{$linked_transcript_array_ref}){
-				my ($cap_transcript_id,$vb_transcript_id) = @{$linked_pair};
-				my %linked_transcripts;
-				#warn "$cap_transcript_id , $vb_transcript_id";
-				
-				$linked_transcripts{cap}{id} = $cap_transcript_id;
-				
-				my $cap_exons_for_transcript_array_ref = GeneModel::get_gene_model_by_id($dbh,'transcript',$cap_transcript_id,'cap');
-				
-				foreach my $row (@{$cap_exons_for_transcript_array_ref}){					
-					$linked_transcripts{cap}{exons}{$row->[0]}=1;	
-				}
-				my $vb_exons_for_transcript_array_ref;				
-				if(defined($vb_transcript_id)){
-					$vb_exons_for_transcript_array_ref = GeneModel::get_gene_model_by_id($dbh,'transcript',$vb_transcript_id,'vb');
-				
-					foreach my $row (@{$vb_exons_for_transcript_array_ref}){					
-						$linked_transcripts{vb}{exons}{$row->[0]}=1;
-					}
-				}
-				
-				my $map_type = compare_exons($dbh,\%linked_transcripts);
-				#warn "MAP_TYPE: $map_type";
-				#If all exons are identical we check cds
-				
-				if($map_type eq 'identical'){
-					my ($cap_cds_start,$cap_cds_end) = CDS::get_cds_pos_by_parent_id($dbh,$cap_transcript_id);
-					my ($vb_cds_start,$vb_cds_end) = CDS::get_cds_pos_by_parent_id($dbh,$vb_transcript_id);
-					if($cap_cds_start ne $vb_cds_start or $cap_cds_end ne $vb_cds_end){
-						$map_type = 'change';
-					}
-				}
-				$insert_transcript_mappings_sth->execute($cap_transcript_id,$vb_transcript_id,$map_type);
-	}	
+	my($dbh) = @_;
+	my $select_transcript_by_rank_sql = "select id,cap_transcript_id,vb_transcript_id,group_count from transcript_links where gene_cluster_id = ? and link_status = 'not_mapped' group by cap_transcript_id,vb_transcript_id having max(link_rank) = ?;";
+	my $select_transcript_by_rank_sth = $dbh->prepare($select_transcript_by_rank_sql);
+	my $gene_cluster_ids = GeneClusters::get_distinct_cluster_ids($dbh);
+	for my $cluster_id (@{$gene_cluster_ids}){	
+		loop_over_rank($dbh,$cluster_id,$select_transcript_by_rank_sth);	
+	}
+	copy_from_link_to_mapping_table($dbh);
 }
 
-sub compare_exons {
-	my($dbh,$linked_transcripts_ref) = @_;
-	my $errorLog = Log::Log4perl->get_logger("TranscriptMapping::compare_exons");
-	my $resulting_cap_map_type;
-	my $resulting_vb_map_type;
-	my $cap_mapped_to_exon_in_other_transcript;
-	my $vb_mapped_to_exon_in_other_transcript;
-	foreach my $exon_id (keys %{$linked_transcripts_ref->{cap}{exons}}){
-		#warn "CAP EXON ID $exon_id";
-		my $EXON_map_type=undef;
-		
-		my $cap_exon_mappings_array_ref = ExonMapping::get_exon_mappings($dbh,'cap',$exon_id);
-		foreach my $row (@{$cap_exon_mappings_array_ref}){
-			my($map_type,$vb_exon_id) = @{$row};
-			#warn "comparing cap:$exon_id vb:$vb_exon_id Type:$map_type ";
-			#$EXON_map_type = $map_type;
-			if(!$map_type or !$vb_exon_id or ($vb_exon_id eq 'none')){
-				$resulting_cap_map_type = 'new';
-				$EXON_map_type = 'new';
-			}elsif(exists $linked_transcripts_ref->{vb}{exons}{$vb_exon_id}){
-				$EXON_map_type = $map_type;
-				if(!$resulting_cap_map_type){ 
-					$resulting_cap_map_type = $map_type;
-					$EXON_map_type  = $map_type;
-				}elsif($resulting_cap_map_type ne $map_type){
-					$resulting_cap_map_type = 'change';
-					$EXON_map_type = 'change';
-				}
-			}else{  #warn "This Exon does not exists in transcript";
-					$cap_mapped_to_exon_in_other_transcript = 1; }			
-					#warn "EXON_map_type 1 $EXON_map_type";
-		}
-		
-		#warn "EXON_map_type 2 $EXON_map_type";
-		if((!$EXON_map_type or !$resulting_cap_map_type) and $cap_mapped_to_exon_in_other_transcript){
-			$resulting_cap_map_type = 'change';		
-		}elsif(!$resulting_cap_map_type){$errorLog->error("CAP exon: $exon_id was linked, but the maptype >$EXON_map_type< could not be resolved.");}
-		
-		#warn "comparing cap to vb: $resulting_cap_map_type";
+sub loop_over_rank {
+	my($dbh,$cluster_id,$select_transcript_by_rank_sth) = @_;
+	for(my $rank= 1; $rank <=4; $rank++ ){
+		$select_transcript_by_rank_sth->execute($cluster_id,$rank);	
+		my $array_ref = $select_transcript_by_rank_sth->fetchall_arrayref;
+		next unless(scalar @{$array_ref} > 0);
+		my @transcript_pairs_to_keep;
+		get_transcript_pair_with_min_count($array_ref,\@transcript_pairs_to_keep);
+		update_transcript_link_table($dbh,\@transcript_pairs_to_keep);						
 	}
 	
-	
-	
-	foreach my $exon_id (keys %{$linked_transcripts_ref->{vb}{exons}}){
-		#warn "VB EXON ID $exon_id";
-		my $EXON_map_type=undef;
-		  
-		my $vb_exon_mappings_array_ref = ExonMapping::get_exon_mappings($dbh,'vb',$exon_id);
-		foreach my $row (@{$vb_exon_mappings_array_ref}){
-			my($map_type,$cap_exon_id) = @{$row};
-			#warn "comparing vb:$exon_id cap:$cap_exon_id Type:$map_type ";
-			#$EXON_map_type = $map_type;
-			if(!$map_type or !$cap_exon_id or ($cap_exon_id eq 'none')){
-				$resulting_cap_map_type = 'change';
-				$EXON_map_type = 'change';
-			}elsif(exists $linked_transcripts_ref->{cap}{exons}{$cap_exon_id}){
-				$EXON_map_type = $map_type;
-				if(!$resulting_vb_map_type){ 
-					$resulting_vb_map_type = $map_type;
-					$EXON_map_type = $map_type;
-				}elsif($resulting_vb_map_type ne $map_type){
-					$resulting_vb_map_type = 'change';
-					$EXON_map_type = 'change';
-				}
-			}else{ 	#warn "This Exon does not exists in transcript";
-					$vb_mapped_to_exon_in_other_transcript = 1;}
-		}
-		
-		if((!$EXON_map_type or !$resulting_vb_map_type) and $vb_mapped_to_exon_in_other_transcript){
-			$resulting_vb_map_type = 'change';		
-		}elsif(!$resulting_vb_map_type){$errorLog->error("VB exon: $exon_id was linked, but the maptype >$EXON_map_type< could not be resolved.");}
-		
-		#warn "comparing vb to cap: $resulting_vb_map_type";
+	if(find_unmapped_transcript($dbh,$cluster_id)){
+		loop_over_rank($dbh,$cluster_id,$select_transcript_by_rank_sth);
 	}
-	
+}
 
-	
-	#warn "RESULT $resulting_cap_map_type $resulting_vb_map_type";
-	
-	if(!defined($resulting_vb_map_type) or ($resulting_cap_map_type eq $resulting_vb_map_type)){
-		return $resulting_cap_map_type;	
-	}elsif(($resulting_cap_map_type eq $resulting_vb_map_type) or !$resulting_cap_map_type){
-		return $resulting_vb_map_type;
-	}else{
-		return 'change';	
+sub get_transcript_pair_with_min_count {
+	my($array_ref,$transcript_pairs_to_keep) = @_;
+	if(scalar @{$array_ref} == 0){
+		return;	
+	}elsif(scalar @{$array_ref} == 1){		
+		push @{$transcript_pairs_to_keep}, @{$array_ref};
+		return;
 	}
 	
+	my $uniq_pairs = get_lowest_count($array_ref);
+	push @{$transcript_pairs_to_keep}, @{$uniq_pairs}; 
+	remove_redundant_transcript($array_ref,$uniq_pairs);
+	get_transcript_pair_with_min_count($array_ref,$transcript_pairs_to_keep);
+}
+
+sub get_lowest_count {
+	my($array_ref) = @_;
+	
+	my @sorted_array = sort {$a->[3] <=> $b->[3]} @{$array_ref};
+	my $row = shift @sorted_array;
+	my $lowest_count = $row->[3];
+	
+	push(my (@least_count), $row);
+	foreach my $row (@sorted_array){
+		my $count = $row->[3];
+		if($count == $lowest_count){
+			push( my(@least_count), $row);
+		}else{last;} 		
+	}
+	
+	if(scalar @least_count == 1){
+		return \@least_count;
+	}else{
+		my $uniq_pairs = is_transcript_uniq(\@least_count);
+		return $uniq_pairs;
+	}
+}
+
+sub is_transcript_uniq {
+	my($least_count) = @_;
+	
+	my %cap_ids;
+	my %vb_ids;
+	my @uniq_pair;
+	foreach my $transcript_pair (@{$least_count}){		
+		my($id,$cap_transcript_id,$vb_transcript_id,$group_count) = @{$transcript_pair};
+		
+		if((exists $cap_ids{$cap_transcript_id}) or (exists $vb_ids{$vb_transcript_id})){
+			#write to log!
+		}else{ 
+			$cap_ids{$cap_transcript_id} = 1; 
+			$vb_ids{$vb_transcript_id}  = 1;
+			push @uniq_pair, $transcript_pair;
+		}		
+	}
+	return \	@uniq_pair;
+}
+
+sub remove_redundant_transcript {
+	my($array_ref,$uniq_pairs) = @_;
+	
+	my %cap_ids;
+	my %vb_ids;
+	
+	foreach my $uniq_pair (@{$uniq_pairs}){
+		my($id,$cap_transcript_id,$vb_transcript_id,$group_count) = @{$uniq_pair};
+		$cap_ids{$cap_transcript_id} = 1; 
+		$vb_ids{$vb_transcript_id}  = 1;
+	}
+	
+	my $index=0;
+	foreach my $transcript_pair (@{$array_ref}){
+		my($id,$cap_transcript_id,$vb_transcript_id,$group_count) = @{$transcript_pair};
+		if((exists $cap_ids{$cap_transcript_id}) or (exists $vb_ids{$vb_transcript_id})){
+			splice(@{$array_ref},$index,1);		
+		}else{$index++;}
+	}
+}
+
+sub find_unmapped_transcript {
+	my($dbh,$cluster_id) = @_;
+	
+	my $cap_un_mapped_sql = "select distinct t1.cap_transcript_id 
+	                     from transcript_links t1 
+	                     where t1.gene_cluster_id = ? 
+	                     and t1.link_status = 'unavailable' 
+	                     and not exists (select * from transcript_links t2 where t1.cap_transcript_id = t2.cap_transcript_id and t2.gene_cluster_id = ? and t2.link_status = 'mapped');";
+
+	my $vb_un_mapped_sql = "select distinct t1.vb_transcript_id 
+	                     from transcript_links t1 
+	                     where t1.gene_cluster_id = ? 
+	                     and t1.link_status = 'unavailable' 
+	                     and not exists (select * from transcript_links t2 where t1.vb_transcript_id = t2.vb_transcript_id and t2.gene_cluster_id = ? and t2.link_status = 'mapped');";
+
+	 my $cap_un_mapped_sth = $dbh->prepare($cap_un_mapped_sql);
+	 my $vb_un_mapped_sth  = $dbh->prepare($vb_un_mapped_sql);
+	 $cap_un_mapped_sth->execute($cluster_id,$cluster_id);	
+	 $vb_un_mapped_sth->execute($cluster_id,$cluster_id);
+	 my $cap_array_ref = $cap_un_mapped_sth->fetchall_arrayref;
+	 my $vb_array_ref  = $vb_un_mapped_sth->fetchall_arrayref;
+	 
+	 
+	 if(scalar @{$cap_array_ref} ){ 
+	 	 reset_unmapped_transcripts($dbh,$cap_array_ref,'cap');
+	 	 return 1;
+	 }elsif(scalar @{$vb_array_ref}){
+	 	 reset_unmapped_transcripts($dbh,$vb_array_ref,'vb');
+	 	 return 1;
+	 }else{return 0;}
+	 
+	 
+}
+
+sub reset_unmapped_transcripts {
+	my ($dbh,$array_ref,$source) = @_;
+	
+	my $cap_sql = "update transcript_links set link_status = 'not_mapped' where cap_transcript_id = ?";
+	my $vb_sql  = "update transcript_links set link_status = 'not_mapped' where vb_transcript_id = ?";
+	my $cap_sth = $dbh->prepare($cap_sql);
+	my $vb_sth  = $dbh->prepare($vb_sql);
+	
+	foreach my $row (@{$array_ref}){
+		my $id = $row->[0];
+		if($source eq 'cap'){
+			$cap_sth->execute($id);	
+		}elsif($source eq 'vb'){
+			$vb_sth->execute($id);
+		}	
+	}
 }
 
 sub get_all_transcript_mappings {
@@ -163,104 +171,44 @@ sub get_all_transcript_mappings {
 	return $array_ref;
 }
 
-sub insert_transcript_mappings{
-		my($dbh)=@_;
-		
-	    
-		my $insert_transcript_mappings_sth = $dbh->prepare(get_sql('insert_transcript_mappings'));
-		
-		#no_match_cap
-		
-		
-		
-		my $exon_array_ref = ExonMapping::get_exon_mappings($dbh);
-		my %transcript_mapping;
-		my %seen_transcript;
-		foreach my $row (@{$exon_array_ref}){
-			my($cap_exon_id,$vb_exon_id,$map_type) = ($row->[0],$row->[1],$row->[2]);
-			
-			
-			
-			
-			my $cap_transcript_id = GeneModel::get_gene_model_by_id($dbh,'exon',$cap_exon_id,'cap','transcript');
-			my $vb_transcript_id  = GeneModel::get_gene_model_by_id($dbh,'exon',$cap_exon_id,'cap','transcript');
-			#warn "CAP $cap_transcript_id - VB $vb_transcript_id\n";
-			if(!$vb_transcript_id){
-				$vb_transcript_id ='none';
-			}
-			if(!$cap_transcript_id){
-				foreach my $cap_transcript_key (keys %transcript_mapping){
-					foreach my $vb_transcript_value (@{$transcript_mapping{$cap_transcript_key}{vb_transcript_id}}){
-							if($vb_transcript_value eq $vb_transcript_id){
-								$transcript_mapping{$cap_transcript_key}{macth_type} = 'change';
-							}
-					}
-				}
-				next;				
-			}
-			#my $key = $cap_transcript_id . ':' . $vb_transcript_id;
-			
-			
-			my $macth_type;
-			if($row->[2] eq 'no_match_cap'){
-				$macth_type= 'new';
-			}elsif($row->[2] eq 'no_match_vb'){
-				$macth_type= 'lost';
-			}elsif($row->[2] eq 'identical'){
-				$macth_type= 'identical';
-			}else{
-				$macth_type= 'change';	
-			}
-			
-			
-			
-			
-			if(!exists $transcript_mapping{$cap_transcript_id}){
-				$transcript_mapping{$cap_transcript_id}{macth_type} = $macth_type;
-				if($vb_transcript_id ne 'none' and !exists $seen_transcript{$cap_transcript_id}{$vb_transcript_id}){
-						push @{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}},$vb_transcript_id;
-						$seen_transcript{$vb_transcript_id} = 1;				
-				}
-			}else{
-				
-				if($transcript_mapping{$cap_transcript_id}{macth_type} ne $macth_type){
-					$transcript_mapping{$cap_transcript_id}{macth_type} = 'change';
-				}
-				
-				foreach my $transcript_id (@{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}}){
-						if($transcript_id ne $vb_transcript_id){
-							$transcript_mapping{$cap_transcript_id}{macth_type} = 'change';
-							if($vb_transcript_id ne 'none' and !exists $seen_transcript{$cap_transcript_id}{$vb_transcript_id}){
-								push @{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}},$vb_transcript_id;
-								$seen_transcript{$vb_transcript_id} = 1;
-							}
-						}
-				}	
-			}
-			
-		}
-		
-		foreach my $cap_transcript_id (keys %transcript_mapping){
-			if(!defined(@{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}}) or scalar @{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}} == 0){
-				$insert_transcript_mappings_sth->execute($cap_transcript_id,'none',$transcript_mapping{$cap_transcript_id}{macth_type});		
-			}
-			warn scalar @{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}};
-			if(scalar @{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}} > 1 ){
-				$transcript_mapping{$cap_transcript_id}{macth_type} = 'change';		
-			}
-			foreach my $vb_transcript_id (@{$transcript_mapping{$cap_transcript_id}{vb_transcript_id}}){
-				$insert_transcript_mappings_sth->execute($cap_transcript_id,$vb_transcript_id,$transcript_mapping{$cap_transcript_id}{macth_type});
-			}
-		}
-		
+sub get_all_transcript_mappings_by_id {
+	my ($dbh,$cluster_id) = @_;
+	my %attr;
+	my @values;
+	push @values,$cluster_id; 
+	my $sql = "select cap_trans_id,vb_trans_id,map_type from transcript_mappings where gene_cluster_id = \'$cluster_id\';";
+	my $array_ref = $dbh->selectall_arrayref($sql);
+	return $array_ref;
 }
 
-sub get_sql{
-	my ($sql_name) = @_;
-	
-	if($sql_name eq 'insert_transcript_mappings'){
-			my $insert_transcript_mappings = "insert transcript_mappings(cap_trans_id,vb_trans_id,map_type) select ?,?,?;";
-			return $insert_transcript_mappings;
+
+
+sub update_transcript_link_table {
+	my ($dbh,$array_ref) = @_;
+	foreach my $uniq_transcript_pair (@{$array_ref}){
+		my($id,$cap_transcript_id,$vb_transcript_id,$count) = @{$uniq_transcript_pair};
+		my $set_row_mapped_sql = "update transcript_links set link_status = 'mapped' where id = \'$id\';";
+		$dbh->do($set_row_mapped_sql);
+		my $set_row_unavailable_sql = "update transcript_links set link_status = 'unavailable' where link_status = 'not_mapped' and (cap_transcript_id = \'$cap_transcript_id\' or vb_transcript_id = \'$vb_transcript_id\');";
+		$dbh->do($set_row_unavailable_sql);
 	}
 }
+
+
+sub copy_from_link_to_mapping_table {
+	my ($dbh) = @_;
+	
+	my $link_table_sql = "select gene_cluster_id, cap_transcript_id,vb_transcript_id,link_group from transcript_links where link_status = 'mapped';";
+	my $insert_into_transcript_mapping = "insert transcript_mappings(gene_cluster_id,cap_trans_id,vb_trans_id,map_type) select ?,?,?,?;"; 
+	my $insert_into_transcript_mapping_sth = $dbh->prepare($insert_into_transcript_mapping);
+	my $array_ref = $dbh->selectall_arrayref($link_table_sql);
+	
+	foreach my $row (@{$array_ref}){
+		my($gene_cluster_id,$cap_transcript_id,$vb_transcript_id,$map_type) = @{$row};
+		
+		 
+		$insert_into_transcript_mapping_sth->execute($gene_cluster_id,$cap_transcript_id,$vb_transcript_id,$map_type);
+	}
+}
+
 1;

@@ -1,21 +1,3 @@
-=head1 LICENSE
-
-Copyright [2017] EMBL-European Bioinformatics Institute
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-=cut
-
 package GeneMapping;
 
 use strict;
@@ -32,129 +14,297 @@ sub resolve_maptype_cluster {
 	my $clusters = GeneClusters::get_distinct_cluster_ids($dbh);
 	
 	foreach my $cluster (@{$clusters}){
-		my($cluster_id) = @{$cluster};
+		my $cluster_id = $cluster;
 		my($cap_gene_count,$cap_transcript_count,$vb_gene_count,$vb_transcript_count) = @{GeneClusters::get_cluster_summary_by_id($dbh,$cluster_id)->[0]}; 
 		
-		if($cap_gene_count == 1 and $vb_gene_count == 0){    #new Gene
-			my($cap_gene) = @{GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id)->[0]};
-			insert_gene_mappings($dbh,"$cap_gene:",'new');
-		}elsif($cap_gene_count == 1 and $vb_gene_count == 1){#gene change or identical gene
-			my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-			my($cap_gene_id,$vb_gene_id,$final_maptype);
+		if($cap_gene_count == 1 and $vb_gene_count == 0){    #new Gene			
+			new_gene($dbh,$cluster_id);	
+		}elsif(($cap_gene_count == 1 and $vb_gene_count == 1) and ($cap_transcript_count == $vb_transcript_count)){#gene change or identical gene
+			if(identical_genes($dbh,$cluster_id)){
 			
-			foreach my $row (@{$cluster_ref}){
-				my($gene_id,$source) = @{$row};
-				
-				if($source eq 'cap'){
-					$cap_gene_id = $gene_id;
-				}elsif($source eq 'vb'){
-					$vb_gene_id = $gene_id;
-				}else{croak("Source not known");}
+			}else{			
+				exon_change($dbh,$cluster_id);
 			}
-			
-			my %transcript_lookup;
-			my $transcript_maps = TranscriptMapping::get_all_transcript_mappings($dbh);
-			foreach my $row (@{$transcript_maps}){
-				my($cap_trans_id,$vb_trans_id,$map_type) = @{$row};
-				$transcript_lookup{$cap_trans_id} = $map_type;
-				if(defined($vb_trans_id)){
-					$transcript_lookup{$vb_trans_id}  = $map_type;
-				}
-			}
-			
-			
-			my @transcript = (@{GeneModel::get_gene_model_by_id($dbh,'gene',$cap_gene_id,'cap','transcript',1)},@{GeneModel::get_gene_model_by_id($dbh,'gene',$vb_gene_id,'vb','transcript',1)});
-			
-			
-			foreach my $transcript (@transcript){			
-				my $maptype = $transcript_lookup{$transcript};
-				if(!defined($maptype) or $maptype ne 'identical'){
-					$final_maptype = 'change';
-				}else{$final_maptype = 'identical';}
-			}
-			
-			insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",$final_maptype);
-		
+		}elsif(($cap_gene_count == 1 and $vb_gene_count == 1) and ($cap_transcript_count > $vb_transcript_count)){
+			gain_iso_form($dbh,$cluster_id)
+		}elsif(($cap_gene_count == 1 and $vb_gene_count == 1) and ($cap_transcript_count < $vb_transcript_count)){
+			lost_iso_form($dbh,$cluster_id);
 		}elsif($cap_gene_count > 1 and $vb_gene_count == 1){#split
-			my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-			my $vb_gene_id;
-			my @cap_gene_id;
-			foreach my $row (@{$cluster_ref}){
-				my ($gene_id,$source) = @{$row};
-				if($source eq 'vb'){
-					$vb_gene_id = $gene_id;
-				}else{
-					push @cap_gene_id,$gene_id; 	
-				}
-			}
-			
-			foreach my $cap_gene_id (@cap_gene_id){
-				insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'split');
-			}
-			
+			split_gene($dbh,$cluster_id);			
 		}elsif($cap_gene_count == 1 and $vb_gene_count > 1){#merge
-			my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-			my $cap_gene_id;
-			my @vb_gene_id;
-			foreach my $row (@{$cluster_ref}){
-				my ($gene_id,$source) = @{$row};
-				if($source eq 'cap'){
-					$cap_gene_id = $gene_id;
-				}else{
-					push @vb_gene_id,$gene_id; 	
-				}
-			}
-			
-			foreach my $vb_gene_id (@vb_gene_id){
-				insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'merge');
-			}
-		
+			merge_gene($dbh,$cluster_id);
 		}elsif($cap_gene_count > 1 and $vb_gene_count > 1){ #complex loci i.e merge and split
-			my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-			my %gene_lookup;
-			
-			my $transcript_maps = TranscriptMapping::get_all_transcript_mappings($dbh);			
-			foreach my $row (@{$transcript_maps}){
-				my($cap_trans_id,$vb_trans_id,$map_type) = @{$row};
-				next unless($cap_trans_id and $vb_trans_id);
-				my $cap_gene_id = GeneModel::get_distinct_id_by_id($dbh,'transcript',$cap_trans_id,'gene','cap',0);
-				my $vb_gene_id  = GeneModel::get_distinct_id_by_id($dbh,'transcript',$vb_trans_id,'gene','vb',0);
-				$gene_lookup{cap}{$cap_gene_id}{count}++;
-				$gene_lookup{vb}{$vb_gene_id}{count}++;
-				push @{$gene_lookup{vb}{$vb_gene_id}{genes}},$cap_gene_id;
-				push @{$gene_lookup{cap}{$cap_gene_id}{genes}},$vb_gene_id;
-			}
-			
-			my %uniq_gene_mappings;
-			foreach my $row (@{$cluster_ref}){
-				my($gene_id,$source) = @{$row};				
-				if($source eq 'vb'){										
-					if($gene_lookup{vb}{$gene_id}{count} > 1){
-						foreach my $cap_gene_id (@{$gene_lookup{vb}{$gene_id}{genes}}){
-							if(! exists $uniq_gene_mappings{split}{"$cap_gene_id:$gene_id"}){
-								insert_gene_mappings($dbh,"$cap_gene_id:$gene_id",'split');
-								$uniq_gene_mappings{split}{"$cap_gene_id:$gene_id"} = 1;
-							}
-						}
-					}
-				}	
-			
-				
-				if($source eq 'cap'){
-					if($gene_lookup{cap}{$gene_id}{count} > 1){
-						foreach my $vb_gene_id (@{$gene_lookup{cap}{$gene_id}{genes}}){
-							if(! exists $uniq_gene_mappings{merge}{"$gene_id:$vb_gene_id"}){
-								insert_gene_mappings($dbh,"$gene_id:$vb_gene_id",'merge');
-								$uniq_gene_mappings{merge}{"$gene_id:$vb_gene_id"} = 1;
-							}
-						}
-					}						
-				}				
-			 }
-		
+			complex_split_merge_gene($dbh,$cluster_id);		
 		}else{confess("Cluster $cluster_id was not processed");}#error
 	}
 		
+}
+
+
+sub identical_genes{
+	my($dbh,$cluster_id) = @_;
+	
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
+	foreach my $transcript_pair (@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$maptype)	= @{$transcript_pair};
+		unless($maptype eq 'identical'){ return 0;}
+	}
+	
+	my($cap_gene_id,$vb_gene_id);
+	my $cluster = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+	
+	foreach my $gene (@{$cluster}){
+			my($gene_id,$source) = @{$gene};	
+			if($source eq 'cap'){
+					$cap_gene_id = $gene_id;
+			}elsif($source eq 'vb'){
+					$vb_gene_id = $gene_id;
+			}else{croak("Source not known");}
+	}
+	
+	insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'identical');
+	return 1;
+	
+}
+
+sub lost_iso_form{
+	my($dbh,$cluster_id) = @_;
+	
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
+	
+	my %ranks = (identical     => 1,
+		        exon_boundary  => 2,
+		        exon_number    => 3,
+		        CDS_change => 4
+		        );
+	
+	
+	my $final_maptype = 'identical';
+	foreach my $transcript_pair (@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$map_type) = @{$transcript_pair};
+		if($ranks{$map_type} > $ranks{$final_maptype} ){
+			$final_maptype = $map_type;
+		}
+	}
+	
+	if($final_maptype eq 'identical'){ return 0;}
+		
+	my($cap_gene_id,$vb_gene_id);
+	my $cluster = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+	
+	foreach my $gene (@{$cluster}){
+			my($gene_id,$source) = @{$gene};	
+			if($source eq 'cap'){
+					$cap_gene_id = $gene_id;
+			}elsif($source eq 'vb'){
+					$vb_gene_id = $gene_id;
+			}else{croak("Source not known");}
+	}
+	
+	insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'lost_iso_form');
+}
+
+sub gain_iso_form{
+	my($dbh,$cluster_id) = @_;
+	
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
+	
+	my %ranks = (identical     => 1,
+		        exon_boundary  => 2,
+		        exon_number    => 3,
+		        CDS_change => 4
+		        );
+	
+	
+	my $final_maptype = 'identical';
+	foreach my $transcript_pair (@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$map_type) = @{$transcript_pair};
+		if($ranks{$map_type} > $ranks{$final_maptype} ){
+			$final_maptype = $map_type;
+		}
+	}
+	
+	if($final_maptype eq 'identical'){ return 0;}
+		
+	my($cap_gene_id,$vb_gene_id);
+	my $cluster = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+	
+	foreach my $gene (@{$cluster}){
+			my($gene_id,$source) = @{$gene};	
+			if($source eq 'cap'){
+					$cap_gene_id = $gene_id;
+			}elsif($source eq 'vb'){
+					$vb_gene_id = $gene_id;
+			}else{croak("Source not known");}
+	}
+	
+	insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'gain_iso_form');
+}
+
+sub exon_change{
+	my($dbh,$cluster_id) = @_;
+	
+	my %ranks = (identical     => 1,
+		        exon_boundary  => 2,
+		        exon_number    => 3,
+		        CDS_change => 4
+		        );
+	
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
+	
+	my $final_maptype = 'identical';
+	foreach my $transcript_pair (@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$map_type) = @{$transcript_pair};
+		if($ranks{$map_type} > $ranks{$final_maptype} ){
+			$final_maptype = $map_type;
+		}
+	}
+	
+	my($cap_gene_id,$vb_gene_id);
+	my $cluster = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+	
+	foreach my $gene (@{$cluster}){
+			my($gene_id,$source) = @{$gene};	
+			if($source eq 'cap'){
+					$cap_gene_id = $gene_id;
+			}elsif($source eq 'vb'){
+					$vb_gene_id = $gene_id;
+			}else{croak("Source not known");}
+	}
+	insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",$final_maptype);
+}
+
+sub new_gene{
+	my($dbh,$cluster_id) = @_;
+	my($cap_gene) = @{GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id)->[0]};
+	insert_gene_mappings($dbh,"$cap_gene:",'new');
+}
+
+sub split_gene{
+	my($dbh,$cluster_id) = @_;
+	
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
+	
+	my %ranks = (identical     => 1,
+		        exon_boundary  => 2,
+		        exon_number    => 3,
+		        CDS_change => 4
+		        );
+	
+	
+	my $final_maptype = 'identical';
+	foreach my $transcript_pair (@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$map_type) = @{$transcript_pair};
+		if($ranks{$map_type} > $ranks{$final_maptype} ){
+			$final_maptype = $map_type;
+		}
+	}
+	
+	unless($final_maptype eq 'CDS_change'){ }#warn to output
+	
+		
+	my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+	my $vb_gene_id;
+	my @cap_gene_id;
+	foreach my $row (@{$cluster_ref}){
+		my ($gene_id,$source) = @{$row};
+		if($source eq 'vb'){
+			$vb_gene_id = $gene_id;
+		}else{
+			push @cap_gene_id,$gene_id; 	
+		}
+	}
+			
+	foreach my $cap_gene_id (@cap_gene_id){
+		insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'split');
+	}
+}
+
+sub merge_gene{
+	my($dbh,$cluster_id) = @_;
+	
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
+	
+	my %ranks = (identical     => 1,
+		        exon_boundary  => 2,
+		        exon_number    => 3,
+		        CDS_change => 4
+		        );
+	
+	
+	my $final_maptype = 'identical';
+	foreach my $transcript_pair (@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$map_type) = @{$transcript_pair};
+		if($ranks{$map_type} > $ranks{$final_maptype} ){
+			$final_maptype = $map_type;
+		}
+	}
+	
+	unless($final_maptype eq 'CDS_change'){ }#warn to output
+	
+	my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
+	my $cap_gene_id;
+	my @vb_gene_id;
+	foreach my $row (@{$cluster_ref}){
+		my ($gene_id,$source) = @{$row};
+		if($source eq 'cap'){
+			$cap_gene_id = $gene_id;
+		}else{
+			push @vb_gene_id,$gene_id; 	
+		}
+	}
+			
+	foreach my $vb_gene_id (@vb_gene_id){
+		insert_gene_mappings($dbh,"$cap_gene_id:$vb_gene_id",'merge');
+	}
+}
+
+sub complex_split_merge_gene{
+	my($dbh,$cluster_id) = @_;
+				
+	my %gene_lookup;
+			
+	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);					
+	foreach my $transcript_pair(@{$cluster_transcripts}){
+		my($cap_trans_id,$vb_trans_id,$map_type) = @{$transcript_pair};
+		next unless($cap_trans_id and $vb_trans_id);
+		my $cap_gene_id = GeneModel::get_distinct_id_by_id($dbh,'transcript',$cap_trans_id,'gene','cap',0);
+		my $vb_gene_id  = GeneModel::get_distinct_id_by_id($dbh,'transcript',$vb_trans_id,'gene','vb',0);
+		$gene_lookup{cap}{$cap_gene_id}{count}++;
+		$gene_lookup{vb}{$vb_gene_id}{count}++;
+		push @{$gene_lookup{vb}{$vb_gene_id}{genes}},$cap_gene_id;
+		push @{$gene_lookup{cap}{$cap_gene_id}{genes}},$vb_gene_id;
+	}
+			
+	my $cluster_ref = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);		
+	my %uniq_gene_mappings;
+	foreach my $row (@{$cluster_ref}){
+		my($gene_id,$source) = @{$row};				
+		
+		
+		if($source eq 'vb'){										
+			if($gene_lookup{vb}{$gene_id}{count} > 1){
+				foreach my $cap_gene_id (@{$gene_lookup{vb}{$gene_id}{genes}}){
+					if(! exists $uniq_gene_mappings{split}{"$cap_gene_id:$gene_id"}){
+						insert_gene_mappings($dbh,"$cap_gene_id:$gene_id",'split');
+						$uniq_gene_mappings{split}{"$cap_gene_id:$gene_id"} = 1;
+					}
+				}
+			}
+		}	
+			
+				
+		if($source eq 'cap'){
+			if($gene_lookup{cap}{$gene_id}{count} > 1){
+				foreach my $vb_gene_id (@{$gene_lookup{cap}{$gene_id}{genes}}){
+					if(! exists $uniq_gene_mappings{merge}{"$gene_id:$vb_gene_id"}){
+						insert_gene_mappings($dbh,"$gene_id:$vb_gene_id",'merge');
+						$uniq_gene_mappings{merge}{"$gene_id:$vb_gene_id"} = 1;
+					}
+				}
+			}						
+		}				
+	}
 }
 
 sub insert_gene_mappings{

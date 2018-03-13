@@ -130,7 +130,13 @@ sub get_distinct_cluster_ids{
 	my($dbh) = @_;
 	my $sql = "select distinct(gene_cluster_id) from gene_clusters;";
 	my $array_ref = _submit_sql($dbh,$sql);
-	return $array_ref;
+	
+	my @ids;
+	foreach my $row_ref (@{$array_ref}){
+		push @ids, $row_ref->[0];
+	}
+	
+	return \@ids;
 }
 
 sub get_gene_cluster_by_id {
