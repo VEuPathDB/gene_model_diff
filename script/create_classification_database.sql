@@ -54,6 +54,7 @@ create table if not exists cluster_summary(
 drop table if exists transcript_mappings;
 create table if not exists transcript_mappings(
 			id       int not null AUTO_INCREMENT PRIMARY KEY,
+			gene_cluster_id     int,
 			cap_trans_id  varchar(500) default NULL,
 			vb_trans_id   varchar(500) default NULL,
 			map_type      varchar(500)
@@ -61,6 +62,7 @@ create table if not exists transcript_mappings(
 
 drop table if exists gene_mappings;
 create table if not exists gene_mappings(
+			gene_cluster_id     int,
 			cap_gene_id   varchar(500) default NULL,
 			vb_gene_id    varchar(500) default NULL,
 			map_type      varchar(500)
@@ -69,8 +71,15 @@ create table if not exists gene_mappings(
 
 drop table if exists transcript_links;
 create table if not exists transcript_links(
+			id                  int not null AUTO_INCREMENT PRIMARY KEY,
+			gene_cluster_id     int,
 			cap_transcript_id   varchar(500),
-			vb_transcript_id    varchar(500)
+			vb_transcript_id    varchar(500),
+			link_group          varchar(500),
+			link_rank           int,
+			group_count		   int,
+			link_status	       varchar(500)
+						
 );
 
 						
