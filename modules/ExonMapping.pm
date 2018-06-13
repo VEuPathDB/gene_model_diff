@@ -16,6 +16,35 @@ limitations under the License.
 
 =cut
 
+=head1 CONTACT
+	
+	Please email comments or questions to info@vectorbase.org
+	
+=cut
+
+=head1 NAME
+
+ExonMapping
+
+=head1 SYNOPSIS
+
+	use ExonMapping;
+	
+	ExonMapping::work_out_exon_mapping($dbh);
+
+=head1 DESCRIPTION
+
+This module determine exon overlap for all exons and inserts the the resulting maptype into the exon_mappings table.
+This module is the interface to the exon_mappings table.
+
+=head1 Author
+
+	Mikkel B Christensen
+
+=head1 METHODS
+
+=cut
+
 package ExonMapping;
 
 use strict;
@@ -29,18 +58,27 @@ use lib('.');
 use GeneModel;
 
 
+=head2 work_out_exon_mapping
+
+ Title: work_out_exon_mapping
+ Usage: ExonMapping::work_out_exon_mapping($dbh)
+ Function: determine exon overlap for all exons
+ Returns: Nothing 
+ Args: Database handle object
+=cut
+
 sub work_out_exon_mapping{
 	my ($dbh) = @_;
-	my @exon_matches = qw(identical included partial_5 partial_3 spanning no_match_cap no_match_vb);#no_math_cap no_macth_vb
+	my @exon_matches = qw(identical included partial_5 partial_3 spanning no_match_cap no_match_vb);#map types
 	my %mapped_exons;
-	my $errorLog = Log::Log4perl->get_logger("ExonMapping::work_out_exon_mapping");
+	my $errorLog = Log::Log4perl->get_logger("errorlogger");
 	foreach my $exon_match (@exon_matches){
 		try{
 			if($exon_match eq 'no_match_vb'){
-				find_unmatch_vb_exon($dbh);			
+				_find_unmatch_vb_exon($dbh);			
 			}else{
 				my $over_lap_ref = Exon::get_overlapping_exons($dbh,$exon_match);
-				insert_exon_mappings($dbh,\%mapped_exons,$over_lap_ref,$exon_match);
+				_insert_exon_mappings($dbh,\%mapped_exons,$over_lap_ref,$exon_match);
 			}
 		}catch{
 			$errorLog->error($_);	
@@ -50,9 +88,82 @@ sub work_out_exon_mapping{
 	}	
 }
 
-sub insert_exon_mappings{
+=head2 get_map_type_for_exon_pair
+
+ Title: get_map_type_for_exon_pair
+ Usage: ExonMapping::get_map_type_for_exon_pair($dbh,$cap_exon_id,$vb_exon_id)
+ Function: select maptype for pair of cap and core exon.
+ Returns: string
+ Args: Database handle object, cap exon ID, core exon ID
+=cut
+
+sub get_map_type_for_exon_pair {
+	my($dbh,$cap_exon,$vb_exon)= @_;
+	my $sql = "select map_type from exon_mappings where cap_exon_id = \'$cap_exon\' and vb_exon_id = \'$vb_exon\'";
+	my $array_ref = _submit_sql($dbh,$sql);
+	return $array_ref->[0]->[0];
+}
+
+=head2
+
+ Title: get_exon_mappings_by_id
+ Usage: ExonMapping::et_exon_mappings_by_id($dbh,$exon_type,$transcript_id);
+ Function: select all exons and map_type for a transcript. 
+ Returns: Array refference
+ Args: Database handle object, exon source (cap or vb,core), transcript ID
+=cut
+
+sub get_exon_mappings_by_id {
+	my($dbh,$exon_type,$id) = @_;
+	
+	my %exon_types =( "cap"   => "cap_exon_id",
+					  "vb"   => "vb_exon_id",
+					  "core" => "vb_exon_id"
+					  );
+	
+	my $sql = "select cap_exon_id,vb_exon_id,map_type from exon_mappings, gene_model where $exon_types{$exon_type} = exon_id and transcript_id =\'$id\';";
+	my $array_ref = _submit_sql($dbh,$sql);	
+	
+	return $array_ref;
+}
+
+=head2 get_exon_mappings
+
+ Title: get_exon_mappings
+ Usage: ExonMapping::get_exon_mappings($dbh,$exon_source,$exon_id)
+ Function: select map_type for single exon if exon source and exon id is given, else all exons.
+ Returns: Array refference
+ Args: Database handle object, exon source (cap or vb,core), exon ID
+=cut
+
+sub get_exon_mappings {
+	my($dbh,$exon_type,$id) = @_;
+		
+	my %exon_types =( "cap" => "cap_exon_id",
+					  "vb"  => "vb_exon_id",
+					  "core" => "vb_exon_id"
+					  );
+	
+	my $return_type;
+	if($exon_type eq 'cap'){
+		$return_type = 'vb';
+	}else{$return_type = 'cap'}
+	
+	my $sql;
+	if($exon_type and $id){
+		$sql = "select map_type, $exon_types{$return_type} from exon_mappings where $exon_types{$exon_type} = \'$id\'";
+	}else{
+		$sql = "select cap_exon_id,vb_exon_id,map_type from exon_mappings;";
+	}
+	#warn $sql;
+	my $array_ref = _submit_sql($dbh,$sql);
+	return $array_ref;
+	
+}
+
+sub _insert_exon_mappings{
 	my ($dbh,$mapped_exons,$array_ref,$macth) = @_;
-	my $insert_sth = $dbh->prepare(get_sql('insert_exon_mapping'));
+	my $insert_sth = $dbh->prepare(_get_sql('insert_exon_mapping'));
 	my $size = keys %{$mapped_exons};
 	
 	
@@ -81,12 +192,12 @@ sub insert_exon_mappings{
 	
 }
 
-sub find_unmatch_vb_exon {
+sub _find_unmatch_vb_exon {
 	my($dbh) = @_;
-	my $mapped_vb_exons_sth = $dbh->prepare(get_sql('get_mapped_vb_exons'));
-	my $mapped_vb_transcript_sth = $dbh->prepare(get_sql('get_mapped_vb_transcript'));
+	my $mapped_vb_exons_sth = $dbh->prepare(_get_sql('get_mapped_vb_exons'));
+	my $mapped_vb_transcript_sth = $dbh->prepare(_get_sql('get_mapped_vb_transcript'));
 	
-	my $insert_non_mapped_exons_sth = $dbh->prepare(get_sql('insert_non_mapped_exons'));
+	my $insert_non_mapped_exons_sth = $dbh->prepare(_get_sql('insert_non_mapped_exons'));
 	
 	$mapped_vb_exons_sth->execute();
 	
@@ -104,49 +215,7 @@ sub find_unmatch_vb_exon {
 	}	
 }
 
-sub get_map_type_for_exon_pair {
-	my($dbh,$cap_exon,$vb_exon)= @_;
-	my $sql = "select map_type from exon_mappings where cap_exon_id = \'$cap_exon\' and vb_exon_id = \'$vb_exon\'";
-	my $array_ref = _submit_sql($dbh,$sql);
-	return $array_ref->[0]->[0];
-}
 
-sub get_exon_mappings_by_id {
-	my($dbh,$exon_type,$id) = @_;
-	
-	my %exon_types =( "cap" => "cap_exon_id",
-					  "vb"  => "vb_exon_id"
-					  );
-	
-	my $sql = "select cap_exon_id,vb_exon_id,map_type from exon_mappings, gene_model where $exon_types{$exon_type} = exon_id and transcript_id =\'$id\';";
-	my $array_ref = _submit_sql($dbh,$sql);	
-	
-	return $array_ref;
-}
-
-sub get_exon_mappings {
-	my($dbh,$exon_type,$id) = @_;
-		
-	my %exon_types =( "cap" => "cap_exon_id",
-					  "vb"  => "vb_exon_id"
-					  );
-	
-	my $return_type;
-	if($exon_type eq 'cap'){
-		$return_type = 'vb';
-	}else{$return_type = 'cap'}
-	
-	my $sql;
-	if($exon_type and $id){
-		$sql = "select map_type, $exon_types{$return_type} from exon_mappings where $exon_types{$exon_type} = \'$id\'";
-	}else{
-		$sql = "select cap_exon_id,vb_exon_id,map_type from exon_mappings;";
-	}
-	#warn $sql;
-	my $array_ref = _submit_sql($dbh,$sql);
-	return $array_ref;
-	
-}
 
 sub _submit_sql {
 	my($dbh,$sql) = @_;
@@ -154,7 +223,7 @@ sub _submit_sql {
 	return $array_ref;	
 }
 
-sub get_sql{
+sub _get_sql{
 	my ($sql_name) = @_;
 	
 	if($sql_name eq 'insert_exon_mapping'){

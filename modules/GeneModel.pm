@@ -16,6 +16,34 @@ limitations under the License.
 
 =cut
 
+=head1 CONTACT
+	
+	Please email comments or questions to info@vectorbase.org
+	
+=cut
+
+=head1 NAME
+
+GeneModel
+
+=head1 SYNOPSIS
+
+	use GeneModel;
+	
+	GeneModel::get_gene_model_by_id($dbh,$type,$id,$source,$return_type,$force_array);
+
+=head1 DESCRIPTION
+
+This module is the interface to the gene_model table.
+
+=head1 Author
+
+	Mikkel B Christensen
+
+=head1 METHODS
+
+=cut
+
 package GeneModel;
 use strict;
 use warnings;
@@ -35,6 +63,15 @@ my %return_types = ("gene"        => "2",
 			 		"gene_model" => "0..2"
 				   );
 
+=head2 get_transcripts_by_gene_id
+
+ Title: get_transcripts_by_gene_id
+ Usage: GeneModel::get_transcripts_by_gene_id($dbh,$gene_id,$source)
+ Function: Get Transcript IDs for a gene ID
+ Returns: Array ref of transcript IDs
+ Args: Database handle object, Gene ID, Source of gene 
+=cut
+
 sub get_transcripts_by_gene_id {
 	my ($dbh,$gene_id,$source) = @_;
 	my $array_ref = GeneModel::get_distinct_id_by_id($dbh,'gene',$gene_id,'transcript',$source,1);
@@ -46,6 +83,15 @@ sub get_transcripts_by_gene_id {
 
 }
 
+=head2 get_exons_by_transcript_id
+
+ Title: get_exons_by_transcript_id
+ Usage: GeneModel::get_exons_by_transcript_id($dbh,$transcript_id,$source)
+ Function: Get exon IDs for transcript ID
+ Returns: Array ref exon IDs
+ Args: Database handle object, transcript ID, Source of transcript.
+=cut
+
 sub get_exons_by_transcript_id {
 	my($dbh,$transcript_id,$source) = @_;
 	my $gene_model_ref = GeneModel::get_gene_model_by_id($dbh,'transcript',$transcript_id,$source);
@@ -55,6 +101,15 @@ sub get_exons_by_transcript_id {
 	}
 	return \@exons;
 }
+
+=head2 
+
+ Title: get_gene_model_by_id
+ Usage: GeneModel::get_gene_model_by_id($dbh,$type,$id,$source,$return_type,$force_array)
+ Function: Get gene_model by either Gene/Transcript/Exon ID
+ Returns: Array_ref or single feature ID  
+ Args: Database handle object, type of feature ID to search with,source,feature ID, feature ID to return, boolean to force array.  
+=cut
 
 sub get_gene_model_by_id {
 	my($dbh,$type,$id,$source,$return_type,$force_array) = @_;
@@ -94,6 +149,15 @@ sub get_gene_model_by_id {
    }	
 }
 
+=head2 get_distinct_id_by_id
+
+ Title: get_distinct_id_by_id
+ Usage: GeneModel::get_distinct_id_by_id($dbh,$type,$id,$return_id,$source,$force_array)
+ Function: Get Gene/Transcript/exon/ ID seaech whith Gene/Transcript/exon/ ID  
+ Returns: Single feature ID
+ Args: Database handle object, type of feature ID to search with,feature ID,feature ID to return,source,boolean to force array. 
+=cut
+
 sub get_distinct_id_by_id {
 	my($dbh,$type,$id,$return_id,$source,$force_array) = @_;
 	confess("missing parameter to get_distinct_id_by_id") unless($dbh and $type and $id and $return_id and $source);
@@ -106,12 +170,38 @@ sub get_distinct_id_by_id {
 	
 }
 
+=head2 get_distinct_id_by_source
+
+ Title: get_distinct_id_by_source
+ Usage: GeneModel::get_distinct_id_by_source($dbh,$type,$source)
+ Function: get all Get Gene/Transcript/exon/ ID for a source
+ Returns array ref of feature ID
+ Args: Database handle object, feature type, source.
+=cut
+
 sub get_distinct_id_by_source {
 	my($dbh,$type,$source) = @_;
 	
 	my $sql = "select distinct $types{$type} from gene_model where source = \'$source\';";
 	my $array_ref = _submit_sql($dbh,$sql);	
 	return $array_ref;
+}
+
+=head2 get_error_code_by_gene_id
+
+ Title: get_error_code_by_gene_id
+ Usage: GeneModel::get_error_code_by_gene_id($dbh,$gene_id,$source)
+ Function: get error code for gene_model
+ Returns array_ref
+ Args: Database handle object, Gene ID, Source
+=cut
+
+sub get_error_code_by_gene_id {
+	my($dbh,$gene_id,$source) = @_;
+	my $sql = "select distinct error_code from gene_model where gene_id = \'$gene_id\' and source = \'$source\';";
+	my $array_ref = _submit_sql($dbh,$sql);
+	my $error_code = $array_ref->[0]->[0];
+	return $error_code;
 }
 
 sub _submit_sql {

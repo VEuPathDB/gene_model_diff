@@ -11,9 +11,10 @@ create table if not exists exon(
 drop table if exists cds;
 create table if not exists cds(
 			cds_parent_id varchar(500),
-			start         int,
-			end           int
-
+			start         	int,
+			end           	int,
+			md5_checksum  	varchar(50),
+			cds_error_code	int
 );
 
 drop table if exists gene_model;
@@ -22,7 +23,8 @@ create table if not exists gene_model(
 			exon_id       varchar(500),
 			transcript_id varchar(500),
 			gene_id       varchar(500),
-			source        varchar(500)
+			source        varchar(500),
+			error_code	  int
 );
 
 
@@ -39,7 +41,8 @@ drop table if exists gene_clusters;
 create table if not exists gene_clusters(
 			gene_cluster_id int not null,
 			gene_id	varchar(500),
-			source	varchar(500)
+			source	varchar(500),
+			error_code int
 );
 
 drop table if exists cluster_summary;

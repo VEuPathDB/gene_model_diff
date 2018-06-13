@@ -16,6 +16,35 @@ limitations under the License.
 
 =cut
 
+=head1 CONTACT
+	
+	Please email comments or questions to info@vectorbase.org
+	
+=cut
+
+=head1 NAME
+
+Exon
+
+=head1 SYNOPSIS
+
+	use Exon;
+	
+	my exon_overlap_Array_ref = Exon::get_overlapping_exons($dbh,'partial_3');
+	
+=head1 DESCRIPTION
+	
+This module is the interface to the exon table which contains genomic coordinates for all Exons.
+The module contains the SQL to extract exons that overlap between core and cap geneset.
+
+=head1 Author
+
+	Mikkel B Christensen
+
+=head1 METHODS
+
+=cut
+
 package Exon;
 
 use strict;
@@ -28,7 +57,7 @@ use Log::Log4perl;
 =head2 get_overlapping_exons
 
  Title:    get_overlapping_exons	
- Usage:    Exon::get_overlapping_exons().	
+ Usage:    Exon::get_overlapping_exons($dbh,'partial_3').	
  Function: Execute SQL on the database. 	
  Returns:  Array refference of pairs of overlapping exon ids. 	
  Args:     Database handle object,type of overlap, where type can be one of the following strings (identical|partial_3|partial_5|spanning|included|no_match_cap). 
@@ -36,7 +65,7 @@ use Log::Log4perl;
 
 sub get_overlapping_exons{
 	my ($dbh,$overlap_type) = @_;
-	my $sql = get_sql($overlap_type);
+	my $sql = _get_sql($overlap_type);
 	#log error if no SQL
 	unless($sql){
 		confess("There is no SQL of type $overlap_type, therefore no Exons will be returned");
@@ -51,7 +80,7 @@ sub get_overlapping_exons{
 
 
 
-sub get_sql{
+sub _get_sql{
 	my ($sql_name) = @_;
 	
 	if($sql_name eq 'identical'){
