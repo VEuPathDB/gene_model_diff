@@ -1,3 +1,47 @@
+=head1 LICENSE
+
+Copyright [2017] EMBL-European Bioinformatics Institute
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+=cut
+
+=head1 CONTACT
+	
+	Please email comments or questions to info@vectorbase.org
+	
+=cut
+
+=head1 NAME
+
+TranscriptMapping
+
+=head1 SYNOPSIS
+
+TranscriptMapping::resolve_transcript_mappings($dbh)
+
+=head1 DESCRIPTION
+
+In each gene cluster select the set of transcript pairs with least differences lowest rank.
+
+=head1 Author
+
+	Mikkel B Christensen
+
+=head1 METHODS
+
+=cut
+
 package TranscriptMapping;
 use strict;
 use warnings;
@@ -6,34 +50,82 @@ use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use TranscriptLinks;
 use Data::Dumper;
+
+=head2 resolve_transcript_mappings
+
+ Title: resolve_transcript_mappings
+ Usage: TranscriptMapping::resolve_transcript_mappings($dbh)
+ Function: In each gene cluster select the set of transcript pairs with lowest rank
+ Returns: Populates the the gene_mappings table
+ Args: Database handle
+=cut 
+
 sub resolve_transcript_mappings{
 	my($dbh) = @_;
 	my $select_transcript_by_rank_sql = "select id,cap_transcript_id,vb_transcript_id,group_count from transcript_links where gene_cluster_id = ? and link_status = 'not_mapped' group by cap_transcript_id,vb_transcript_id having max(link_rank) = ?;";
 	my $select_transcript_by_rank_sth = $dbh->prepare($select_transcript_by_rank_sql);
-	my $gene_cluster_ids = GeneClusters::get_distinct_cluster_ids($dbh);
+	my @error_limits = (0,9);
+	my $gene_cluster_ids = GeneClusters::get_distinct_cluster_ids($dbh,\@error_limits);
 	for my $cluster_id (@{$gene_cluster_ids}){	
-		loop_over_rank($dbh,$cluster_id,$select_transcript_by_rank_sth);	
+		_loop_over_rank($dbh,$cluster_id,$select_transcript_by_rank_sth);	
 	}
-	copy_from_link_to_mapping_table($dbh);
+	_copy_from_link_to_mapping_table($dbh);
 }
 
-sub loop_over_rank {
+
+=head2 get_all_transcript_mappings
+
+ Title: get_all_transcript_mappings
+ Usage: TranscriptMapping::get_all_transcript_mappings($dbh)
+ Function: selects all transcript mappings
+ Returns: Array ref
+ Args: Database handle
+=cut 
+
+sub get_all_transcript_mappings {
+	my ($dbh) = @_;
+	my $sql = "select cap_trans_id,vb_trans_id,map_type from transcript_mappings;";
+	my $array_ref = $dbh->selectall_arrayref($sql);
+	return $array_ref;
+}
+
+=head2 get_all_transcript_mappings_by_id
+
+ Title: get_all_transcript_mappings_by_id
+ Usage: TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id)
+ Function: selects transcripts mappings for a single cluster
+ Returns: Array ref
+ Args: Database handle
+=cut 
+
+sub get_all_transcript_mappings_by_id {
+	my ($dbh,$cluster_id) = @_;
+	my %attr;
+	my @values;
+	push @values,$cluster_id; 
+	my $sql = "select cap_trans_id,vb_trans_id,map_type from transcript_mappings where gene_cluster_id = \'$cluster_id\';";
+	my $array_ref = $dbh->selectall_arrayref($sql);
+	return $array_ref;
+}
+
+
+sub _loop_over_rank {
 	my($dbh,$cluster_id,$select_transcript_by_rank_sth) = @_;
-	for(my $rank= 1; $rank <=4; $rank++ ){
+	for(my $rank= 1; $rank <=5; $rank++ ){
 		$select_transcript_by_rank_sth->execute($cluster_id,$rank);	
 		my $array_ref = $select_transcript_by_rank_sth->fetchall_arrayref;
 		next unless(scalar @{$array_ref} > 0);
 		my @transcript_pairs_to_keep;
-		get_transcript_pair_with_min_count($array_ref,\@transcript_pairs_to_keep);
-		update_transcript_link_table($dbh,\@transcript_pairs_to_keep);						
+		_get_transcript_pair_with_min_count($array_ref,\@transcript_pairs_to_keep);
+		_update_transcript_link_table($dbh,\@transcript_pairs_to_keep);						
 	}
 	
-	if(find_unmapped_transcript($dbh,$cluster_id)){
-		loop_over_rank($dbh,$cluster_id,$select_transcript_by_rank_sth);
+	if(_find_unmapped_transcript($dbh,$cluster_id)){
+		_loop_over_rank($dbh,$cluster_id,$select_transcript_by_rank_sth);
 	}
 }
 
-sub get_transcript_pair_with_min_count {
+sub _get_transcript_pair_with_min_count {
 	my($array_ref,$transcript_pairs_to_keep) = @_;
 	if(scalar @{$array_ref} == 0){
 		return;	
@@ -42,13 +134,13 @@ sub get_transcript_pair_with_min_count {
 		return;
 	}
 	
-	my $uniq_pairs = get_lowest_count($array_ref);
+	my $uniq_pairs = _get_lowest_count($array_ref);
 	push @{$transcript_pairs_to_keep}, @{$uniq_pairs}; 
-	remove_redundant_transcript($array_ref,$uniq_pairs);
-	get_transcript_pair_with_min_count($array_ref,$transcript_pairs_to_keep);
+	_remove_redundant_transcript($array_ref,$uniq_pairs);
+	_get_transcript_pair_with_min_count($array_ref,$transcript_pairs_to_keep);
 }
 
-sub get_lowest_count {
+sub _get_lowest_count {
 	my($array_ref) = @_;
 	
 	my @sorted_array = sort {$a->[3] <=> $b->[3]} @{$array_ref};
@@ -66,12 +158,12 @@ sub get_lowest_count {
 	if(scalar @least_count == 1){
 		return \@least_count;
 	}else{
-		my $uniq_pairs = is_transcript_uniq(\@least_count);
+		my $uniq_pairs = _is_transcript_uniq(\@least_count);
 		return $uniq_pairs;
 	}
 }
 
-sub is_transcript_uniq {
+sub _is_transcript_uniq {
 	my($least_count) = @_;
 	
 	my %cap_ids;
@@ -91,7 +183,7 @@ sub is_transcript_uniq {
 	return \	@uniq_pair;
 }
 
-sub remove_redundant_transcript {
+sub _remove_redundant_transcript {
 	my($array_ref,$uniq_pairs) = @_;
 	
 	my %cap_ids;
@@ -112,7 +204,7 @@ sub remove_redundant_transcript {
 	}
 }
 
-sub find_unmapped_transcript {
+sub _find_unmapped_transcript {
 	my($dbh,$cluster_id) = @_;
 	
 	my $cap_un_mapped_sql = "select distinct t1.cap_transcript_id 
@@ -136,17 +228,17 @@ sub find_unmapped_transcript {
 	 
 	 
 	 if(scalar @{$cap_array_ref} ){ 
-	 	 reset_unmapped_transcripts($dbh,$cap_array_ref,'cap');
+	 	 _reset_unmapped_transcripts($dbh,$cap_array_ref,'cap');
 	 	 return 1;
 	 }elsif(scalar @{$vb_array_ref}){
-	 	 reset_unmapped_transcripts($dbh,$vb_array_ref,'vb');
+	 	 _reset_unmapped_transcripts($dbh,$vb_array_ref,'vb');
 	 	 return 1;
 	 }else{return 0;}
 	 
 	 
 }
 
-sub reset_unmapped_transcripts {
+sub _reset_unmapped_transcripts {
 	my ($dbh,$array_ref,$source) = @_;
 	
 	my $cap_sql = "update transcript_links set link_status = 'not_mapped' where cap_transcript_id = ?";
@@ -164,26 +256,9 @@ sub reset_unmapped_transcripts {
 	}
 }
 
-sub get_all_transcript_mappings {
-	my ($dbh) = @_;
-	my $sql = "select cap_trans_id,vb_trans_id,map_type from transcript_mappings;";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	return $array_ref;
-}
-
-sub get_all_transcript_mappings_by_id {
-	my ($dbh,$cluster_id) = @_;
-	my %attr;
-	my @values;
-	push @values,$cluster_id; 
-	my $sql = "select cap_trans_id,vb_trans_id,map_type from transcript_mappings where gene_cluster_id = \'$cluster_id\';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	return $array_ref;
-}
 
 
-
-sub update_transcript_link_table {
+sub _update_transcript_link_table {
 	my ($dbh,$array_ref) = @_;
 	foreach my $uniq_transcript_pair (@{$array_ref}){
 		my($id,$cap_transcript_id,$vb_transcript_id,$count) = @{$uniq_transcript_pair};
@@ -195,7 +270,7 @@ sub update_transcript_link_table {
 }
 
 
-sub copy_from_link_to_mapping_table {
+sub _copy_from_link_to_mapping_table {
 	my ($dbh) = @_;
 	
 	my $link_table_sql = "select gene_cluster_id, cap_transcript_id,vb_transcript_id,link_group from transcript_links where link_status = 'mapped';";

@@ -15,10 +15,49 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 =cut
+
+=head1 CONTACT
+	
+	Please email comments or questions to info@vectorbase.org
+	
+=cut
+
+=head1 NAME
+
+AnnotationEvents
+
+=head1 SYNOPSIS
+	
+	use AnnotationEvents;
+	
+	$identical_gene_count = AnnotationEvents::get_identical_gene($dbh);
+
+=head1 DESCRIPTION
+
+This module is the interface to the gene_events table which contains the final event type for each gene.
+The module contains the SQL to insert the final event type based on the event type in the gene_mapping table. 
+
+=head1 Author
+
+	Mikkel B Christensen
+
+=head1 METHODS
+
+=cut
+
 package AnnotationEvents;
 
 use strict;
 use warnings;
+
+=head2 
+
+ Title:	get_identical_gene    	
+ Usage: AnnotationEvents::get_identical_gene($dbh)  	
+ Function: Gets identical genes from the gene_mapping table and inserts them in to the gene_events table  	
+ Returns: Count of indentical genes  
+ Args: Database handle object     
+=cut
 
 sub get_identical_gene {
 	my($dbh) = @_;
@@ -39,6 +78,15 @@ sub get_identical_gene {
 	return $gene_count;
 }
 
+=head2 
+
+ Title: get_new_gene   	
+ Usage: AnnotationEvents::get_new_gene($dbh)   	
+ Function: Gets new genes from the gene_mapping table and inserts them in to the gene_events table  	
+ Returns: Count of new genes  
+ Args: Database handle object     
+=cut
+
 sub get_new_gene{
 	my($dbh) = @_;
 	
@@ -55,6 +103,15 @@ sub get_new_gene{
 	}
 	return $gene_count;
 }
+
+=head2 
+
+ Title: get_changed_genes   	
+ Usage: AnnotationEvents::get_changed_genes($dbh)   	
+ Function: Gets exon_boundary exon_number CDS_change gain_iso_form lost_iso_form from the gene_mapping table and inserts them as change_gene in to the gene_events table  	
+ Returns: Count of changed genes 
+ Args: Database handle object	     
+=cut
 
 sub get_changed_genes {
 	my($dbh) = @_;
@@ -78,6 +135,15 @@ sub get_changed_genes {
 	
 	return $gene_count;
 }
+
+=head2 
+
+ Title: get_splits   	
+ Usage: AnnotationEvents::get_splits($dbh)   	
+ Function: Gets split genes from the gene_mapping table and inserts them in to the gene_events table 	
+ Returns: Total count of splits and count of core and cap genes involved
+ Args: Database handle object    
+=cut
 
 sub get_splits{
 	my($dbh) = @_;
@@ -106,6 +172,15 @@ sub get_splits{
 	
 	return ($total_splits,$vb_genes,$cap_genes);
 }
+
+=head2 
+
+ Title: get_merge   	
+ Usage: AnnotationEvents::get_merge($dbh)   	
+ Function: Gets merged genes from the gene_mapping table and inserts them in to the gene_events table 	
+ Returns: Total count of merges and count of core and cap genes involved
+ Args: Database handle object     
+=cut
 
 sub get_merge{
 	my($dbh) = @_;

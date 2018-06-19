@@ -1,3 +1,49 @@
+=head1 LICENSE
+
+Copyright [2017] EMBL-European Bioinformatics Institute
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+=cut
+
+=head1 CONTACT
+	
+	Please email comments or questions to info@vectorbase.org
+	
+=cut
+
+=head1 NAME
+
+TranscriptLinks
+
+=head1 SYNOPSIS
+
+TranscriptLinks::work_out_transcript_links($dbh).
+
+=head1 DESCRIPTION
+
+To determine if a community annotated transcript (cap) has changed it must be compared to its parallel core transcript.
+This is done by making all Cap core transcript pairs and assign a score based on exon and CDS similarity.
+The transcript pairs are ranked and inserted into the transcript_links table. 
+
+=head1 Author
+
+	Mikkel B Christensen
+
+=head1 METHODS
+
+=cut
+
 package TranscriptLinks;
 
 use strict;
@@ -11,7 +57,7 @@ use ExonMapping;
 use CDS;
 
 
-=head2 get_overlapping_exons
+=head2 work_out_transcript_links
 
  Title:    work_out_transcript_links	
  Usage:    TranscriptLinks::work_out_transcript_links().	
@@ -22,15 +68,20 @@ use CDS;
 
 sub work_out_transcript_links {
 	my($dbh) = @_;
-	my $insert_transcript_links_sth = $dbh->prepare(get_sql('insert_transcript_links'));
-	my $gene_cluster_ids = GeneClusters::get_distinct_cluster_ids($dbh);
+	my $errorLog = Log::Log4perl->get_logger("errorlogger");
+	my $insert_transcript_links_sth = $dbh->prepare(_get_sql('insert_transcript_links'));
+	my @error_limits = (0,9);
+	my $gene_cluster_ids = GeneClusters::get_distinct_cluster_ids($dbh,\@error_limits);
 	foreach my $cluster_id (@{$gene_cluster_ids}){
 		my $gene_cluster = GeneClusters::get_gene_cluster_by_id($dbh,$cluster_id);
-		my $transcript_pairs = make_transcript_pairs($dbh,$gene_cluster);
+		my $transcript_pairs = _make_transcript_pairs($dbh,$gene_cluster);
 		foreach my $transcript_pair (@{$transcript_pairs}){
-			my $ranks = rank_transcript_pair($dbh,$transcript_pair);
+			my $ranks = _rank_transcript_pair($dbh,$transcript_pair);
 			my($cap_id,$vb_id) = split /:/,$transcript_pair;
-			next unless($ranks);
+			unless($ranks){
+				$errorLog->error("No rank was returned for transcript pair: $transcript_pair");
+				next;
+			};
 			foreach my $group (keys %{$ranks} ){				
 				$insert_transcript_links_sth->execute($cluster_id,$cap_id,$vb_id,$group,$ranks->{$group}->{rank},$ranks->{$group}->{count},'not_mapped');
 			}
@@ -38,7 +89,9 @@ sub work_out_transcript_links {
 	}
 }
 
-sub make_transcript_pairs {
+
+
+sub _make_transcript_pairs {
 	my($dbh,$gene_cluster) = @_;
 	my @cap;
 	my @vb;
@@ -62,12 +115,13 @@ sub make_transcript_pairs {
 	
 }
 
-sub rank_transcript_pair {
+sub _rank_transcript_pair {
 	my($dbh,$transcript_pair) = @_;
 	my %ranks = (identical     => 1,
-		     exon_boundary  => 2,
-		     exon_number    => 3,
-		     CDS_change => 4
+		     	exon_boundary => 2,
+		     	exon_number   => 3,
+		     	CDS_change    => 4,
+		     	CDS_error     => 5 
 		     );
 	
 	my %groups = (identical  => 'identical',
@@ -77,15 +131,16 @@ sub rank_transcript_pair {
 		      spanning    => 'exon_boundary',
 		      add_exon    => 'exon_number',
 		      delete_exon => 'exon_number',
-		      CDS_change  => 'CDS_change'
+		      CDS_change  => 'CDS_change',
+		      CDS_error   => 'CDS_error'
 		     );	     
 	my %maptype_count;
 	my($cap_transcript_id,$vb_transcript_id) = split/:/,$transcript_pair;
 	my $cap_exons = GeneModel::get_exons_by_transcript_id($dbh,$cap_transcript_id,'cap');
 	my $vb_exons  = GeneModel::get_exons_by_transcript_id($dbh,$vb_transcript_id,'vb');
-	my($exon_maptype_array,$no_exon_maptype_array) = compare_exons($dbh,$cap_exons,$vb_exons);
+	my($exon_maptype_array,$no_exon_maptype_array) = _compare_exons($dbh,$cap_exons,$vb_exons);
 	if(scalar @{$exon_maptype_array}){
-		my $cds_status     = compare_cds($dbh,$cap_transcript_id,$vb_transcript_id);
+		my $cds_status     = _compare_cds($dbh,$cap_transcript_id,$vb_transcript_id);
 		
 		foreach my $map_type (@{$exon_maptype_array}){
 			my $group = $groups{$map_type};
@@ -110,7 +165,7 @@ sub rank_transcript_pair {
 
 }
 
-sub compare_exons {
+sub _compare_exons {
 	my($dbh,$cap_exons,$vb_exons) = @_;
 	my %cap_exon_ids = map {$_ => 1} @{$cap_exons};
 	my %vb_exon_ids  = map {$_ => 1} @{$vb_exons};
@@ -138,18 +193,26 @@ sub compare_exons {
 }
 
 
-sub compare_cds {
+sub _compare_cds {
 	my($dbh,$cap_transcript_id,$vb_transcript_id) = @_;
-	my ($cap_cds_start,$cap_cds_end) = CDS::get_cds_pos_by_parent_id($dbh,$cap_transcript_id);
-	my ($vb_cds_start,$vb_cds_end)   = CDS::get_cds_pos_by_parent_id($dbh,$vb_transcript_id);
+	my ($cap_cds_checksum) = CDS::get_cds_checksum_by_parent_id($dbh,$cap_transcript_id);
+	my ($cap_error_code) = CDS::get_cds_error_code_by_parent_id($dbh,$cap_transcript_id);
+	my ($vb_cds_checksum)  = CDS::get_cds_checksum_by_parent_id($dbh,$vb_transcript_id);
+	my ($vb_error_code) = CDS::get_cds_error_code_by_parent_id($dbh,$vb_transcript_id);
 	
-	if($cap_cds_start ne $vb_cds_start or $cap_cds_end ne $vb_cds_end){
+	if($cap_error_code > $vb_error_code){
+		return 'CDS_error';
+	}
+	
+	if($cap_cds_checksum ne $vb_cds_checksum){
 		return 'CDS_change';
 	}else{ return 0; }
 
 }
 
-sub get_sql{
+sub _get_sql{
+	
+	
 	my ($sql_name) = @_;
 		
 	if($sql_name eq 'insert_transcript_links'){

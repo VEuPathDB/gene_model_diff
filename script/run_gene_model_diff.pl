@@ -92,7 +92,7 @@ my $config = readConfig($options{config});
 my $datadir= $config->val('Data','datadir');
 my $scriptdir = $config->val('Data','scriptdir');
 my $species_list = get_species($options{speciesFile});
-my $log_file = "$datadir/" .  $config->val('Data','log_file');
+my $log_file = $config->val('Data','log_file');
 Log::Log4perl->init($log_file);
 
 foreach my $species (@{$species_list}){
@@ -143,7 +143,12 @@ sub load_data_base {
 	warn "running load database for $species";
 	
 		
-	my $datadir= $config->val('Data','datadir');
+	my $datadir= $config->val('Data','datadir');	
+	my $host = $config->val('Database','host');
+	my $port = $config->val('Database','port');
+	my $user = $config->val('Database','user');
+	my $pass = $config->val('Database','pass');
+	my $load_database = $config->val('Database','load_database');
 	
 	my $cap_gff    = "$datadir/$species/cap.gff";
 	my $core_gff   = "$datadir/$species/core.gff";
@@ -151,15 +156,15 @@ sub load_data_base {
 	my $core_fasta = "$datadir/$species/core.fasta";
 	my $validation_file = "$datadir/$species/gff_validation_error.txt";
 	
-		
+	my $dns  = "dbi:mysql:$load_database:$host:$port";	
 	$dbh = get_dbh($config,$species);
 	
 	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
 	
-	my($cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded) = Initialize::load_gene_set($dbh,$validation_file,'cap',$cap_gff,$cap_fasta);
-	
+	my($cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded) = Initialize::load_gene_set($dbh,$config,$validation_file,'cap',$cap_gff,$cap_fasta,$dns,$user,$pass);
+	warn "$cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded\n";
 	if($cap_total_loaded){
-		my($vb_pre_loaded,$vb_not_finished,$vb_not_validated,$vb_total_loaded) = Initialize::load_gene_set($dbh,$validation_file,'vb',$pruned_core_gff);
+		my($vb_pre_loaded,$vb_not_finished,$vb_not_validated,$vb_total_loaded) = Initialize::load_gene_set($dbh,$config,$validation_file,'vb',$pruned_core_gff,$core_fasta,$dns,$user,$pass);
 	}
 	return $cap_total_loaded;
  	
