@@ -75,7 +75,7 @@ sub resolve_maptype_cluster {
 	
 	foreach my $cluster (@{$clusters}){
 		my $cluster_id = $cluster;
-		my($cap_gene_count,$cap_transcript_count,$vb_gene_count,$vb_transcript_count) = @{GeneClusters::get_cluster_summary_by_id($dbh,$cluster_id)->[0]}; 
+		my($cap_gene_count,$cap_transcript_count,$vb_gene_count,$vb_transcript_count,$cap_max_error,$vb_max_error) = @{GeneClusters::get_cluster_summary_by_id($dbh,$cluster_id)->[0]}; 
 		
 		if($cap_gene_count == 1 and $vb_gene_count == 0){    #new Gene			
 			_new_gene($dbh,$cluster_id);	
@@ -83,7 +83,7 @@ sub resolve_maptype_cluster {
 			if(_identical_genes($dbh,$cluster_id)){
 			
 			}else{			
-				_exon_change($dbh,$cluster_id);
+				_exon_change($dbh,$cluster_id,$cap_max_error,$vb_max_error);
 			}
 		}elsif(($cap_gene_count == 1 and $vb_gene_count == 1) and ($cap_transcript_count > $vb_transcript_count)){
 			_gain_iso_form($dbh,$cluster_id)
@@ -288,13 +288,19 @@ sub _gain_iso_form{
 }
 
 sub _exon_change{
-	my($dbh,$cluster_id) = @_;
+	my($dbh,$cluster_id,$cap_max_error,$vb_max_error) = @_;
 	
 	my %ranks = (identical     => 1,
 		        exon_boundary  => 2,
 		        exon_number    => 3,
 		        CDS_change => 4
 		        );
+	my $errorLog = Log::Log4perl->get_logger("errorlogger");
+	
+	if($cap_max_error > $vb_max_error){
+		$errorLog->error("Cluster $cluster_id was not processed, because cap gene had more errors than reference.");
+		return;
+	} 
 	
 	my $cluster_transcripts = TranscriptMapping::get_all_transcript_mappings_by_id($dbh,$cluster_id);
 	

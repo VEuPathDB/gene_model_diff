@@ -82,6 +82,7 @@ sub validate_gene {
 						   		 'CDS_internal_stop' => $config->val('Validate','CDS_internal_stop'),
 						   		 'runtime_error' => $config->val('Validate','runtime_error')
 						   	   );
+	my %validation_approved_email = ( 'approved_email' => $config->val('Validate','approved_email'));
 	
 	my %gene_hash;
 	$gene_hash{scaffold} = $gene->seq_id;
@@ -98,6 +99,21 @@ sub validate_gene {
 		my %mRNA_attb = $mRNA->attributes;
 		my $mRNA_validation_status = 0;
 		
+		my $NO_ATG = 0;
+		my $NO_STOP = 0;
+
+		if(exists $mRNA_attb{'no-ATG'}){
+			if($mRNA_attb{owner}->[0] eq $validation_approved_email{approved_email}){
+				$NO_ATG = 2;
+			}else{ $NO_ATG = 1;}
+		}
+		
+		if(exists $mRNA_attb{'no-STOP'}){
+			if($mRNA_attb{owner}->[0] eq $validation_approved_email{approved_email}){
+				$NO_STOP = 2;
+			}else{ $NO_STOP = 1;}
+		}
+				
 		eval{				
 				my $mRNA_ID   = $mRNA_attb{load_id}->[0];
 				$mRNA_hash{scaffold} = $mRNA->seq_id;
@@ -159,15 +175,25 @@ sub validate_gene {
 				$mRNA->add_tag_value('validation_error_code' => $mRNA_validation_status);
 				$mRNA->update();
 		};
+		warn "$mRNA_validation_status : $validation_error_code{CDS_stop} : $NO_STOP";
 		if($@){
 			$errorLog->error($@);
 			$gene_validation_status = -1;
 		}elsif($mRNA_validation_status and $gene_validation_status > -1 and $gene_validation_status < $mRNA_validation_status){
-			if($mRNA_validation_status == $validation_error_code{CDS_start} and  exists $mRNA_attb{'no-ATG'})	{
+			if($mRNA_validation_status == $validation_error_code{CDS_start} and  $NO_ATG == 2){
+				#approved
+				$gene_validation_status = 0;
+			}elsif($mRNA_validation_status == $validation_error_code{CDS_stop} and $NO_STOP == 2){
+				#approved
+				$gene_validation_status = 0;
+			}elsif(($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start})) and $NO_ATG == 2 and $NO_STOP == 2){
+				#approved
+				$gene_validation_status = 0;
+			}elsif($mRNA_validation_status == $validation_error_code{CDS_start} and $NO_ATG == 1){
 				$gene_validation_status = $mRNA_validation_status;				
-			}elsif($mRNA_validation_status == $validation_error_code{CDS_stop} and exists $mRNA_attb{'no-STOP'}){
+			}elsif($mRNA_validation_status == $validation_error_code{CDS_stop} and $NO_STOP == 1){
 				$gene_validation_status = $mRNA_validation_status;	
-			}elsif(($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start})) and exists $mRNA_attb{'no-ATG'} and exists $mRNA_attb{'no-STOP'}){
+			}elsif(($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start})) and $NO_ATG == 1 and $NO_STOP == 1){
 				$gene_validation_status = $mRNA_validation_status;
 			}else{$gene_validation_status = -$mRNA_validation_status;}
 		}		
@@ -176,6 +202,10 @@ sub validate_gene {
 	if($gene_validation_status){
 		my $gene_id = $gene_attb{load_id}->[0];
 		my $owner =   $gene_attb{owner}->[0];
+		
+		if(!$owner){
+			$owner = 'None';
+		}
 		
 		print $validation_fh "gene:$gene_id\t$owner\t$validation_string\n";
 	

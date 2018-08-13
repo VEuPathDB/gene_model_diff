@@ -238,11 +238,37 @@ sub get_cluster_summary_by_id{
 	my $sql = "select cap_gene_count,
 			   cap_transcript_count,
 			   vb_gene_count,
-			   vb_transcript_count
+			   vb_transcript_count,
+			   cap_max_error,
+			   vb_max_error
 			   from cluster_summary
 			   where gene_cluster_id = $cluster_id;";
 	my $array_ref = _submit_sql($dbh,$sql);		   
 	return $array_ref;
+}
+
+=head2 get_max_error
+
+ Title: get_max_error
+ Usage: GeneClusters::get_max_error()
+ Function: get the max error code for cap and vb genes respectively
+ Returns: Array_ref, Cluster ID
+ Args: Database handle object, cluster ID
+=cut
+
+sub get_max_error {
+	my($dbh,$cluster_id) = @_;
+	my $sql = "select max(error_code) from gene_clusters where source = ?;";
+	my @cap_param = ('cap');
+	my @vb_param  = ('vb');
+	
+	my $cap_array = _execute_sql($dbh,$sql,\@cap_param);
+	my $vb_array  = _execute_sql($dbh,$sql,\@vb_param);
+	
+	my $max_cap   =  $cap_array->[0]->[0];
+	my $max_vb    =  $vb_array->[0]->[0];
+	
+	return($max_cap,$max_vb);	
 }
 
 sub _recursive_cluster_genes{
