@@ -119,7 +119,7 @@ sub run_species {
 	
 	my $cap_total_loaded=0;
 	
-	
+	warn "Running $species";
 	
     create_database($config,$species);		
 	$cap_total_loaded = load_data_base($config,$species);

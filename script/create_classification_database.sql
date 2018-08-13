@@ -51,7 +51,9 @@ create table if not exists cluster_summary(
 		cap_gene_count int,
 		cap_transcript_count int,
 		vb_gene_count int,	
-		vb_transcript_count int
+		vb_transcript_count int,
+		cap_max_error int,
+		vb_max_error int
 );
 
 drop table if exists transcript_mappings;
