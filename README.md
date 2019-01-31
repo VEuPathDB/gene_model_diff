@@ -4,7 +4,7 @@
 
 ### Features
 
-The main perl script gene_model_diff.pl compares two genesets in GFF3 from the same assembly and classifies each gene model change. The original gene models are in the file "cap.gff" while the updated gene models are located on the "core.gff" file. Both GFF3 files reference to the sequences on the file "cap.fasta".
+The main perl script gene_model_diff.pl compares two genesets in GFF3 from the same assembly and classifies each gene model change. The original gene models are in the file "core.gff" while the updated gene models are located on the "cap.gff" file. Both GFF3 files reference to the sequences on the file "cap.fasta".
 It outputs a new GFF3 file with the genes that should go on the merged dataset and a file with the list of former gene ids to delete from the original geneset.
 
 ### Usage
