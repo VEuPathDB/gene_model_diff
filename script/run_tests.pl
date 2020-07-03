@@ -443,33 +443,6 @@ sub get_dbh {
 	return $dbh;
 }
 
-sub get_dbh_old {
-	my($database,$database_server,$pass) = @_;
-	
-	my $dbh='';
-	if($database_server eq 'mysql'){
-		my $database= 'mbc_' . $database;
-		my $host    ='localhost';
-		my $dns  = "dbi:mysql:$database:$host";
-		   $dbh=DBI->connect( $dns,"mikkel", $pass,{RaiseError => 1})
-			   or die "can't connect to $database as ensrw";
-		
-	}elsif($database_server eq 'mysql-devel-1'){
-		my $database= 'mbc_' . $database;
-		my $host    ='mysql-eg-devel-1.ebi.ac.uk';
-		my $dns  = "dbi:mysql:$database:$host:4126";
-		   $dbh=DBI->connect( $dns,"ensrw", $pass,{RaiseError => 1})
-			or die "can't connect to $database as ensrw";
-	}else{
-		my $database=$database;
-		my $host    ='mysql-eg-prod-vb.ebi.ac.uk';
-		my $dns  = "dbi:mysql:$database:$host:4440";
-		   $dbh=DBI->connect( $dns,"ensrw", $pass,{RaiseError => 1})
-			   or die "can't connect to $database as ensrw";
-	}
-
-	return $dbh;
-}
 
 sub three_tests_dbs{
 	`perl ../run_classify_annotation_events.pl --config $options{config}  --species $testFile`;	

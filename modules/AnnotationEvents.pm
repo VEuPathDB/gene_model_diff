@@ -1,6 +1,6 @@
 =head1 LICENSE
 
-Copyright [2017] EMBL-European Bioinformatics Institute
+Copyright [2017-2020] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ limitations under the License.
 
 =head1 CONTACT
 	
-	Please email comments or questions to info@vectorbase.org
+	Please email comments or questions to help@veupathdb.org
 	
 =cut
 
