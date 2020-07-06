@@ -23,3 +23,14 @@ This is an early release and the software is still under development.
 ### Known Issues
 
 This software only works with Bioperl 1.6 (it does not work with 1.7).
+
+### Requirements
+* This software is tested under PERL version 5.16.3
+* autodie
+* Bioperl 1.6 
+* Carp
+* DBI
+* Data::Dumper
+* Digest::MD5
+* Log::Log4perl
+* Try::Tiny
