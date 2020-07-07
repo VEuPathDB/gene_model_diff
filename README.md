@@ -29,8 +29,11 @@ This software only works with Bioperl 1.6 (it does not work with 1.7).
 * autodie
 * Bioperl 1.6 
 * Carp
+* Config::IniFiles
 * DBI
 * Data::Dumper
 * Digest::MD5
+* Getopt::Long
 * Log::Log4perl
+* Pod::Usage
 * Try::Tiny
