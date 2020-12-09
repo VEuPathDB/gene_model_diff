@@ -34,7 +34,7 @@ Initialize
 
 =head1 DESCRIPTION
 
-This module loads the GFF into a SeqFeature Store database either in memory or disk if connection details in given.
+This module loads the GFF into a SeqFeature Store database either in memory or disk if connection details is given.
 The genes that passes the validation is inserted into the gene model table.
 
 =head1 Author
@@ -90,7 +90,7 @@ sub load_gene_set {
 		my %attb = $gene->attributes;
 	
 		if($source eq 'cap'){
-			unless(defined($attb{status}->[0]) and ($attb{status}->[0] eq 'Finished annotating')){
+			unless(defined($attb{status}->[0]) and ($attb{status}->[0] eq 'Finished')){
 				$not_finished++;
 				next;
 			}			
