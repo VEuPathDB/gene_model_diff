@@ -52,7 +52,12 @@ use autodie qw(:all);
 use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use DBI;
-use lib('../modules/.');
+use Config::IniFiles;
+use Getopt::Long;
+use Pod::Usage;
+
+use FindBin;
+use lib("$FindBin::Bin/../modules/.");
 use ExonMapping;
 use GeneClusters;
 use TranscriptLinks;
@@ -60,9 +65,6 @@ use TranscriptMapping;
 use GeneMapping;
 use AnnotationEvents;
 use Initialize;
-use Config::IniFiles;
-use Getopt::Long;
-use Pod::Usage;
 
 
 my $event_new_count;
@@ -90,7 +92,7 @@ my $result = GetOptions(\%options,
 
 my $config = readConfig($options{config});
 my $datadir= $config->val('Data','datadir');
-my $scriptdir = $config->val('Data','scriptdir');
+my $scriptdir = $FindBin::Bin;
 my $species_list = get_species($options{speciesFile});
 my $log_file = $config->val('Data','log_file');
 Log::Log4perl->init($log_file);
