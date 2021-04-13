@@ -175,7 +175,7 @@ sub validate_gene {
 				$mRNA->add_tag_value('validation_error_code' => $mRNA_validation_status);
 				$mRNA->update();
 		};
-		warn "$mRNA_validation_status : $validation_error_code{CDS_stop} : $NO_STOP";
+    #warn "$mRNA_validation_status : $validation_error_code{CDS_stop} : $NO_STOP";
 		if($@){
 			$errorLog->error($@);
 			$gene_validation_status = -1;
