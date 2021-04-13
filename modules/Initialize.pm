@@ -90,7 +90,7 @@ sub load_gene_set {
 		my %attb = $gene->attributes;
 	
 		if($source eq 'cap'){
-			unless(defined($attb{status}->[0]) and ($attb{status}->[0] eq 'Finished')){
+			unless(defined($attb{status}->[0]) and ($attb{status}->[0] =~ /^Finished|Finished annotation$/)){
 				$not_finished++;
 				next;
 			}			
