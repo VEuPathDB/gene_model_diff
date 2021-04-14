@@ -108,7 +108,7 @@ sub get_new_gene{
 
  Title: get_changed_genes   	
  Usage: AnnotationEvents::get_changed_genes($dbh)   	
- Function: Gets exon_boundary exon_number CDS_change gain_iso_form lost_iso_form from the gene_mapping table and inserts them as change_gene in to the gene_events table  	
+ Function: Gets exon_boundary exon_number CDS_change gain_iso_form from the gene_mapping table and inserts them as change_gene in to the gene_events table  	
  Returns: Count of changed genes 
  Args: Database handle object	     
 =cut
@@ -119,7 +119,7 @@ sub get_changed_genes {
 	my $gene_count=0;
 	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
 	
-	my @maptypes = qw(exon_boundary exon_number CDS_change gain_iso_form lost_iso_form);
+	my @maptypes = qw(exon_boundary exon_number CDS_change);
 	my @changed_genes;
 	
 	foreach my $maptype (@maptypes){
@@ -130,6 +130,68 @@ sub get_changed_genes {
 			my $vb_gene_id  = $row->[1];
 		    my $cap_gene_id = $row->[0];
 			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'change_gene');
+			$gene_count++;
+	}
+	
+	return $gene_count;
+}
+
+=head2
+ Title: get_lost_iso_form   	
+ Usage: AnnotationEvents::get_splits($dbh)   	
+ Function: Gets lost_iso_form from the gene_mapping table and inserts them in to the gene_events table 	
+ Returns: Total count of genes with lost_iso_form
+ Args: Database handle object 
+=cut
+
+sub get_lost_iso_form {
+	my($dbh) = @_;
+	
+	my $gene_count=0;
+	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+	
+	my @maptypes = qw(lost_iso_form);
+	my @changed_genes;
+	
+	foreach my $maptype (@maptypes){
+		push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh,$maptype);};	
+	}
+	
+	foreach my $row (@changed_genes){
+			my $vb_gene_id  = $row->[1];
+		    my $cap_gene_id = $row->[0];
+			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'lost_iso_form');
+			$gene_count++;
+	}
+	
+	return $gene_count;
+}
+
+=head2
+ Title: get_gain_iso_form   	
+ Usage: AnnotationEvents::get_splits($dbh)   	
+ Function: Gets gain_iso_form from the gene_mapping table and inserts them in to the gene_events table 	
+ Returns: Total count of genes with gain_iso_form
+ Args: Database handle object 
+=cut
+
+sub get_gain_iso_form {
+	my($dbh) = @_;
+	
+	my $gene_count=0;
+	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+	
+	my @maptypes = qw(gain_iso_form);
+	my @changed_genes;
+	
+	foreach my $maptype (@maptypes){
+		push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh,$maptype);};	
+	}
+	
+	foreach my $row (@changed_genes){
+			my $vb_gene_id  = $row->[1];
+		    my $cap_gene_id = $row->[0];
+			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'gain_iso_form');
 			$gene_count++;
 	}
 	
