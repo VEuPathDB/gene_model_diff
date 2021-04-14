@@ -121,7 +121,7 @@ sub run_species {
 	
 	my $cap_total_loaded=0;
 	
-	warn "Running $species";
+	warn "Running $species\n";
 	
     create_database($config,$species);		
 	$cap_total_loaded = load_data_base($config,$species);
@@ -142,7 +142,7 @@ sub run_species {
 sub load_data_base {
 	my($config,$species) = @_;
 	chomp($config,$species);
-	warn "running load database for $species";
+	warn "Running load database for $species\n";
 	
 		
 	my $datadir= $config->val('Data','datadir');	
@@ -164,7 +164,7 @@ sub load_data_base {
 	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
 	
 	my($cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded) = Initialize::load_gene_set($dbh,$config,$validation_file,'cap',$cap_gff,$cap_fasta,$dns,$user,$pass);
-	warn "$cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded\n";
+	warn "Stats: loaded=$cap_pre_loaded, not_finished=$cap_not_finished, not_validated=$cap_not_validated, total_loaded=$cap_total_loaded\n";
 	if($cap_total_loaded){
 		my($vb_pre_loaded,$vb_not_finished,$vb_not_validated,$vb_total_loaded) = Initialize::load_gene_set($dbh,$config,$validation_file,'vb',$pruned_core_gff,$core_fasta,$dns,$user,$pass);
 	}
@@ -181,23 +181,24 @@ sub prune_gff_by_scaffold {
 	open my $core_fh,'<',$core_gff;
 	open my $pruned_core_gff_fh,'>',$pruned_core_gff;
 	
-	while(my $line=<$cap_fh>){
+	while (my $line = <$cap_fh>) {
 		chomp $line;
-		next if $line=~/^#/;
+		next if $line =~ /^#/;
 		my $scaffold = (split/\t/,$line)[0];
-		
-		$cap_scaffold{$scaffold} =1;	
+		next if not $scaffold;
+		$cap_scaffold{$scaffold} = 1;
 	}
 	
-	while(my $line=<$core_fh>){		
-		next if $line=~/^###/;
-		if($line=~/^#/){
+	while (my $line = <$core_fh>) {		
+		next if $line =~ /^###/;
+		if ($line =~ /^#/) {
 			print $pruned_core_gff_fh $line;
-		}else{
+		} else {
 			my $scaffold = (split/\t/,$line)[0];
-			if(exists $cap_scaffold{$scaffold}){
+      next if not $scaffold;
+			if (exists $cap_scaffold{$scaffold}) {
 				print $pruned_core_gff_fh $line;
-			}		
+			}
 		}
 	}
 	return $pruned_core_gff;	
