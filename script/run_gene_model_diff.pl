@@ -135,7 +135,7 @@ sub run_species {
 		write_events($config,$species);
 		write_delete_list($config,$species);
 		write_gff_to_load($config,$species);
-		write_summarry_counts($config,$species);
+		write_summary_counts($config,$species);
 	}else{warn "No genes was loaded for $species\n"}	
 }
 
@@ -345,13 +345,13 @@ sub write_gff_to_load {
 	}
 }
 
-sub write_summarry_counts {
+sub write_summary_counts {
 	my($config,$species) = @_;
     chomp($config,$species);
 	my $datadir= $config->val('Data','datadir');
 	my $gff_file_dir= "$datadir/$species";
 	
-   open  my $file_fh,'>',"$gff_file_dir/summarry_counts.txt";	
+   open  my $file_fh,'>',"$gff_file_dir/summary_counts.txt";	
    print $file_fh  "Identical genes $identical_gene_count\n";
    print $file_fh  "New gene events:\t$event_new_count ($new_gene_count)\n";
    print $file_fh  "Changed gene events:\t$event_change_count ($changed_gene_count)\n";
