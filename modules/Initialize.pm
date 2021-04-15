@@ -90,7 +90,7 @@ sub load_gene_set {
 		my %attb = $gene->attributes;
 	
 		if($source eq 'cap'){
-			unless(defined($attb{status}->[0]) and ($attb{status}->[0] eq 'Finished')){
+			unless(defined($attb{status}->[0]) and ($attb{status}->[0] =~ /^Finished|Finished annotation$/)){
 				$not_finished++;
 				next;
 			}			
@@ -121,7 +121,7 @@ sub load_gene_set {
 
 sub _gff_load {
 	my($gff_file_name,$fasta_file_name,$dsn,$user,$pass) = @_;
-	warn "load GFF";
+	warn "load GFF $gff_file_name\n";
 	$db=();
 	$loader=();
 	if($dsn){

@@ -52,7 +52,12 @@ use autodie qw(:all);
 use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use DBI;
-use lib('../modules/.');
+use Config::IniFiles;
+use Getopt::Long;
+use Pod::Usage;
+
+use FindBin;
+use lib("$FindBin::Bin/../modules/.");
 use ExonMapping;
 use GeneClusters;
 use TranscriptLinks;
@@ -60,9 +65,6 @@ use TranscriptMapping;
 use GeneMapping;
 use AnnotationEvents;
 use Initialize;
-use Config::IniFiles;
-use Getopt::Long;
-use Pod::Usage;
 
 
 my $event_new_count;
@@ -90,7 +92,7 @@ my $result = GetOptions(\%options,
 
 my $config = readConfig($options{config});
 my $datadir= $config->val('Data','datadir');
-my $scriptdir = $config->val('Data','scriptdir');
+my $scriptdir = $FindBin::Bin;
 my $species_list = get_species($options{speciesFile});
 my $log_file = $config->val('Data','log_file');
 Log::Log4perl->init($log_file);
@@ -119,7 +121,7 @@ sub run_species {
 	
 	my $cap_total_loaded=0;
 	
-	warn "Running $species";
+	warn "Running $species\n";
 	
     create_database($config,$species);		
 	$cap_total_loaded = load_data_base($config,$species);
@@ -133,14 +135,14 @@ sub run_species {
 		write_events($config,$species);
 		write_delete_list($config,$species);
 		write_gff_to_load($config,$species);
-		write_summarry_counts($config,$species);
+		write_summary_counts($config,$species);
 	}else{warn "No genes was loaded for $species\n"}	
 }
 
 sub load_data_base {
 	my($config,$species) = @_;
 	chomp($config,$species);
-	warn "running load database for $species";
+	warn "Running load database for $species\n";
 	
 		
 	my $datadir= $config->val('Data','datadir');	
@@ -162,7 +164,7 @@ sub load_data_base {
 	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
 	
 	my($cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded) = Initialize::load_gene_set($dbh,$config,$validation_file,'cap',$cap_gff,$cap_fasta,$dns,$user,$pass);
-	warn "$cap_pre_loaded,$cap_not_finished,$cap_not_validated,$cap_total_loaded\n";
+	warn "Stats: loaded=$cap_pre_loaded, not_finished=$cap_not_finished, not_validated=$cap_not_validated, total_loaded=$cap_total_loaded\n";
 	if($cap_total_loaded){
 		my($vb_pre_loaded,$vb_not_finished,$vb_not_validated,$vb_total_loaded) = Initialize::load_gene_set($dbh,$config,$validation_file,'vb',$pruned_core_gff,$core_fasta,$dns,$user,$pass);
 	}
@@ -179,23 +181,24 @@ sub prune_gff_by_scaffold {
 	open my $core_fh,'<',$core_gff;
 	open my $pruned_core_gff_fh,'>',$pruned_core_gff;
 	
-	while(my $line=<$cap_fh>){
+	while (my $line = <$cap_fh>) {
 		chomp $line;
-		next if $line=~/^#/;
+		next if $line =~ /^#/;
 		my $scaffold = (split/\t/,$line)[0];
-		
-		$cap_scaffold{$scaffold} =1;	
+		next if not $scaffold;
+		$cap_scaffold{$scaffold} = 1;
 	}
 	
-	while(my $line=<$core_fh>){		
-		next if $line=~/^###/;
-		if($line=~/^#/){
+	while (my $line = <$core_fh>) {		
+		next if $line =~ /^###/;
+		if ($line =~ /^#/) {
 			print $pruned_core_gff_fh $line;
-		}else{
+		} else {
 			my $scaffold = (split/\t/,$line)[0];
-			if(exists $cap_scaffold{$scaffold}){
+      next if not $scaffold;
+			if (exists $cap_scaffold{$scaffold}) {
 				print $pruned_core_gff_fh $line;
-			}		
+			}
 		}
 	}
 	return $pruned_core_gff;	
@@ -343,13 +346,13 @@ sub write_gff_to_load {
 	}
 }
 
-sub write_summarry_counts {
+sub write_summary_counts {
 	my($config,$species) = @_;
     chomp($config,$species);
 	my $datadir= $config->val('Data','datadir');
 	my $gff_file_dir= "$datadir/$species";
 	
-   open  my $file_fh,'>',"$gff_file_dir/summarry_counts.txt";	
+   open  my $file_fh,'>',"$gff_file_dir/summary_counts.txt";	
    print $file_fh  "Identical genes $identical_gene_count\n";
    print $file_fh  "New gene events:\t$event_new_count ($new_gene_count)\n";
    print $file_fh  "Changed gene events:\t$event_change_count ($changed_gene_count)\n";
