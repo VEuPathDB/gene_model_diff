@@ -138,7 +138,7 @@ sub get_changed_genes {
 
 =head2
  Title: get_lost_iso_form   	
- Usage: AnnotationEvents::get_splits($dbh)   	
+ Usage: AnnotationEvents::get_lost_iso_form($dbh)   	
  Function: Gets lost_iso_form from the gene_mapping table and inserts them in to the gene_events table 	
  Returns: Total count of genes with lost_iso_form
  Args: Database handle object 
