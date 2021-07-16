@@ -108,7 +108,7 @@ sub get_new_gene{
 
  Title: get_changed_genes   	
  Usage: AnnotationEvents::get_changed_genes($dbh)   	
- Function: Gets exon_boundary exon_number CDS_change gain_iso_form from the gene_mapping table and inserts them as change_gene in to the gene_events table  	
+ Function: Gets exon_boundary exon_number CDS_change from the gene_mapping table and inserts them as change_gene in to the gene_events table  	
  Returns: Count of changed genes 
  Args: Database handle object	     
 =cut
