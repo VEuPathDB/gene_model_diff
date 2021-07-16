@@ -17,4 +17,7 @@ CDS_start=2
 CDS_stop=3
 CDS_internal_stop=4
 runtime_error=-1
-approved_email=superuser@something.xx
+approved_user=<<USER
+superuser12334
+superuser43211
+USER

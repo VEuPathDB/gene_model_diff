@@ -82,7 +82,10 @@ sub validate_gene {
 						   		 'CDS_internal_stop' => $config->val('Validate','CDS_internal_stop'),
 						   		 'runtime_error' => $config->val('Validate','runtime_error')
 						   	   );
-	my %validation_approved_email = ( 'approved_email' => $config->val('Validate','approved_email'));
+	
+	my @approved_users = $config->val('Validate','approved_user'); 
+	my %validation_approved_email = map {$_ => 'approved'} @approved_users;
+	
 	
 	my %gene_hash;
 	$gene_hash{scaffold} = $gene->seq_id;
@@ -103,13 +106,13 @@ sub validate_gene {
 		my $NO_STOP = 0;
 
 		if(exists $mRNA_attb{'no-ATG'}){
-			if($mRNA_attb{owner}->[0] eq $validation_approved_email{approved_email}){
+			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]}){
 				$NO_ATG = 2;
 			}else{ $NO_ATG = 1;}
 		}
 		
 		if(exists $mRNA_attb{'no-STOP'}){
-			if($mRNA_attb{owner}->[0] eq $validation_approved_email{approved_email}){
+			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]}){
 				$NO_STOP = 2;
 			}else{ $NO_STOP = 1;}
 		}
