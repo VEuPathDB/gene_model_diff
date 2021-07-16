@@ -169,7 +169,7 @@ sub get_lost_iso_form {
 
 =head2
  Title: get_gain_iso_form   	
- Usage: AnnotationEvents::get_splits($dbh)   	
+ Usage: AnnotationEvents::get_gain_iso_form($dbh)   	
  Function: Gets gain_iso_form from the gene_mapping table and inserts them in to the gene_events table 	
  Returns: Total count of genes with gain_iso_form
  Args: Database handle object 
