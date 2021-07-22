@@ -320,30 +320,55 @@ sub write_gff_to_load {
 	print $load_gff_fh "##gff-version 3\n";
 	
 	while( my $line = <$cap_gff_fh>){
+    next if $line =~ /^#/;
 		chomp $line;
 		
-		my @colunms = split/\t/,$line;
-		next unless($colunms[2]);
-		if($colunms[2] eq 'gene'){
-			my($ID) = $colunms[8]=~/ID=([\w\-]+)\;/;
-			if(exists $loaded_hash{$ID}){
-				print $load_gff_fh "$colunms[0]\tVectorBase\t$colunms[2]\t$colunms[3]\t$colunms[4]\t$colunms[5]\t$colunms[6]\t$colunms[7]\t$colunms[8]\n";
+		my @columns = split/\t/, $line;
+    if (scalar(@columns) != 9) {
+      warn("Not 9 columns in the gff: $line\n");
+    }
+    my $biotype = $columns[2];
+		next unless $biotype;
+    
+    my %attrib = parse_attribs($columns[8]);
+    my $ID = $attrib{ID};
+		my $parent = $attrib{Parent};
+    
+    $columns[1] = 'VectorBase';
+    my $vb_gff_line = join("\t", @columns) . "\n";
+    
+		if ($biotype eq 'gene') {
+			if (exists $loaded_hash{$ID}) {
+				print $load_gff_fh $vb_gff_line;
 				$gff_gene_count++;
 			}
-		}elsif($colunms[2] eq 'mRNA'){			
-			my($parent) = $colunms[8]=~/Parent=([\w\-]+)\;/;
-			my($ID) = $colunms[8]=~/ID=([\w\-]+)\;/;
-			if(exists $loaded_hash{$parent}){
+		} elsif ($biotype eq 'mRNA') {			
+			if (exists $loaded_hash{$parent}) {
 				$parents_hash{$ID} = 1;
-				print $load_gff_fh "$colunms[0]\tVectorBase\t$colunms[2]\t$colunms[3]\t$colunms[4]\t$colunms[5]\t$colunms[6]\t$colunms[7]\t$colunms[8]\n";
-			}		
-		}elsif($colunms[2] eq 'exon' or $colunms[2] eq 'CDS'){
-			my($parent) = $colunms[8]=~/Parent=([\w\-]+)\;/;
-			if(exists $parents_hash{$parent}){
-				print $load_gff_fh "$colunms[0]\tVectorBase\t$colunms[2]\t$colunms[3]\t$colunms[4]\t$colunms[5]\t$colunms[6]\t$colunms[7]\t$colunms[8]\n";
-			}					
+				print $load_gff_fh $vb_gff_line;
+			}
+		}elsif ($biotype eq 'exon' or $biotype eq 'CDS'){
+			if (exists $parents_hash{$parent}) {
+				print $load_gff_fh $vb_gff_line;
+			}
 		}	
 	}
+}
+
+sub parse_attribs {
+  my ($string) = @_;
+  
+  my %attrib;
+  for my $field (split(";", $string)) {
+    my ($key, $value) = split("=", $field);
+    
+    if (defined $key and defined $value) {
+      $attrib{$key} = $value;
+    } else {
+      warn("Not a key=value attrib: $field\n");
+    }
+  }
+  return %attrib;
 }
 
 sub write_summary_counts {
