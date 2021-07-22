@@ -106,13 +106,13 @@ sub validate_gene {
 		my $NO_STOP = 0;
 
 		if(exists $mRNA_attb{'no-ATG'}){
-			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]}){
+			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]} or exists $mRNA_attb{'is_fmin_partial'}){
 				$NO_ATG = 2;
 			}else{ $NO_ATG = 1;}
 		}
 		
 		if(exists $mRNA_attb{'no-STOP'}){
-			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]}){
+			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]} or exists $mRNA_attb{'is_fmax_partial'}){
 				$NO_STOP = 2;
 			}else{ $NO_STOP = 1;}
 		}
