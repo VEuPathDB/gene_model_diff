@@ -299,7 +299,7 @@ sub _exon_change{
 		        );
 	my $errorLog = Log::Log4perl->get_logger("errorlogger");
 	
-	if($cap_max_error > $vb_max_error){
+	if (defined $cap_max_error and defined $vb_max_error and $cap_max_error > $vb_max_error){
 		$errorLog->error("Cluster $cluster_id was not processed, because cap gene had more errors than reference.");
 		return;
 	} 
