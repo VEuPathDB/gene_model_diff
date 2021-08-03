@@ -69,6 +69,8 @@ use Initialize;
 
 my $event_new_count;
 my $event_change_count;
+my $event_iso_gain_count;
+my $event_iso_lost_count;
 my $event_merge_count;
 my $event_split_count;
 my $delete_total_count;
@@ -78,6 +80,8 @@ my $gff_gene_count;
 my $identical_gene_count;
 my $new_gene_count;
 my $changed_gene_count;
+my $iso_lost_gene_count;
+my $iso_gain_gene_count;
 my @merged_gene_counts;
 my @split_gene_counts;
 
@@ -107,6 +111,8 @@ sub run_species {
 	
 	$event_new_count =0;
 	$event_change_count=0;
+  $event_iso_gain_count = 0;
+  $event_iso_lost_count = 0;
 	$event_merge_count=0;
 	$event_split_count=0;
 	$delete_total_count=0;
@@ -116,6 +122,8 @@ sub run_species {
 	$identical_gene_count=0;
 	$new_gene_count=0;
 	$changed_gene_count=0;
+  $iso_lost_gene_count = 0;
+  $iso_gain_gene_count = 0;
 	@merged_gene_counts=0;
 	@split_gene_counts=0;
 	
@@ -221,6 +229,8 @@ sub get_events {
 	$identical_gene_count = AnnotationEvents::get_identical_gene($dbh);
  	$new_gene_count =       AnnotationEvents::get_new_gene($dbh);
  	$changed_gene_count =   AnnotationEvents::get_changed_genes($dbh);
+ 	$iso_gain_gene_count =   AnnotationEvents::get_gain_iso_form($dbh);
+ 	$iso_lost_gene_count =   AnnotationEvents::get_lost_iso_form($dbh);
  	@merged_gene_counts =   AnnotationEvents::get_merge($dbh);
  	@split_gene_counts =    AnnotationEvents::get_splits($dbh);
 }
@@ -261,6 +271,12 @@ sub write_events {
 		if($event eq 'change_gene'){
 			print $file_handle "Ge\t$vb_gene_id=$cap_gene_id\n//\n";
 			$event_change_count++;
+    }elsif($event eq 'gain_iso_form'){
+			print $file_handle "Ge\t$vb_gene_id=+$cap_gene_id\n//\n";
+			$event_iso_gain_count++;
+    }elsif($event eq 'lost_iso_form'){
+			print $file_handle "Ge\t$vb_gene_id=-$cap_gene_id\n//\n";
+			$event_iso_lost_count++;
 		}elsif($event eq 'new_gene'){
 			print $file_handle "Ge\t+$cap_gene_id\n//\n";
 			$event_new_count++;
@@ -381,6 +397,8 @@ sub write_summary_counts {
    print $file_fh  "Identical genes $identical_gene_count\n";
    print $file_fh  "New gene events:\t$event_new_count ($new_gene_count)\n";
    print $file_fh  "Changed gene events:\t$event_change_count ($changed_gene_count)\n";
+   print $file_fh  "Iso gain events:\t$event_iso_gain_count ($iso_gain_gene_count)\n";
+   print $file_fh  "Iso lost events:\t$event_iso_lost_count ($iso_lost_gene_count)\n";
    print $file_fh  "Merge gene events:\t$event_merge_count ($merged_gene_counts[0],$merged_gene_counts[1],$merged_gene_counts[2])\n";
    print $file_fh  "Split gene events:\t$event_split_count ($split_gene_counts[0],$split_gene_counts[1],$split_gene_counts[2])\n";
    print $file_fh  "Total genes deleted:\t$delete_total_count\n";
