@@ -189,12 +189,20 @@ sub _build_gene_model {
 		
 		
 		my @exons = $mRNA->get_SeqFeatures('exon');
-				
+		
+    my $exon_number = 1;
 		foreach my $exon (@exons){
 		    my %exon_attb = $exon->attributes;
 			my %exon_model;
 			
-			$exon_model{exon_id}   = $exon_attb{load_id}->[0]?$exon_attb{load_id}->[0]:$exon_attb{parent_id}->[0] . $exon_attb{rank}->[0];#make uniq exon ID
+      # Make unique exon id
+      if ($exon_attb{load_id}->[0]) {
+        $exon_model{exon_id} = $exon_attb{load_id}->[0];
+      } else {
+        $exon_model{exon_id} = $exon_attb{parent_id}->[0] . $exon_number;
+        $exon_number++;
+      }
+        
 			$exon_model{scaffold}  = $exon->seq_id;
 			$exon_model{strand}    = $exon->strand;
 			$exon_model{start}     = $exon->start;

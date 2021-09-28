@@ -75,13 +75,14 @@ sub validate_gene {
 	my $errorLog = Log::Log4perl->get_logger("errorlogger");
 	
 	
-	my %validation_error_code = ( 'GFF_mRNA'  => $config->val('Validate','GFF_mRNA'),
-						   		 'GFF_exon'  => $config->val('Validate','GFF_exon'),
-						   		 'CDS_start' => $config->val('Validate','CDS_start'),
-						   		 'CDS_stop'  => $config->val('Validate','CDS_stop'),
-						   		 'CDS_internal_stop' => $config->val('Validate','CDS_internal_stop'),
-						   		 'runtime_error' => $config->val('Validate','runtime_error')
-						   	   );
+  my %validation_error_code = (
+    'GFF_mRNA'  => $config->val('Validate','GFF_mRNA'),
+    'GFF_exon'  => $config->val('Validate','GFF_exon'),
+    'CDS_start' => $config->val('Validate','CDS_start'),
+    'CDS_stop'  => $config->val('Validate','CDS_stop'),
+    'CDS_internal_stop' => $config->val('Validate','CDS_internal_stop'),
+    'runtime_error' => $config->val('Validate','runtime_error')
+  );
 	
 	my @approved_users = $config->val('Validate','approved_user'); 
 	my %validation_approved_email = map {$_ => 'approved'} @approved_users;
@@ -97,27 +98,35 @@ sub validate_gene {
 	my $gene_validation_status = 0;
 	my $validation_string;
 	
-	foreach my $mRNA (@RNAs){
+	foreach my $mRNA (@RNAs) {
 		my %mRNA_hash;
 		my %mRNA_attb = $mRNA->attributes;
 		my $mRNA_validation_status = 0;
 		
 		my $NO_ATG = 0;
 		my $NO_STOP = 0;
-
-		if(exists $mRNA_attb{'no-ATG'}){
-			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]}){
+    
+    # Check both missing start/stop codon
+    # and allow if partial, or owner approved
+		if (exists $mRNA_attb{'no-ATG'}) {
+			if (exists $validation_approved_email{$mRNA_attb{owner}->[0]}
+          or exists $mRNA_attb{'is_fmin_partial'}) {
 				$NO_ATG = 2;
-			}else{ $NO_ATG = 1;}
+			} else {
+        $NO_ATG = 1;
+      }
 		}
 		
-		if(exists $mRNA_attb{'no-STOP'}){
-			if(exists $validation_approved_email{$mRNA_attb{owner}->[0]}){
+		if (exists $mRNA_attb{'no-STOP'}) {
+			if (exists $validation_approved_email{$mRNA_attb{owner}->[0]}
+          or exists $mRNA_attb{'is_fmax_partial'}) {
 				$NO_STOP = 2;
-			}else{ $NO_STOP = 1;}
+			} else {
+        $NO_STOP = 1;
+      }
 		}
 				
-		eval{				
+		eval {
 				my $mRNA_ID   = $mRNA_attb{load_id}->[0];
 				$mRNA_hash{scaffold} = $mRNA->seq_id;
 				$mRNA_hash{strand}   = $mRNA->strand;
@@ -125,11 +134,14 @@ sub validate_gene {
 				$mRNA_hash{end}      = $mRNA->end;
 				
 				my $validation_text;
-				if(!_check_subfeature(\$validation_text,$mRNA_ID,\%gene_hash,\%mRNA_hash,'Gene:mRNA')){
+        
+        # Check mRNA errors
+				if(!_check_subfeature(\$validation_text, $mRNA_ID, \%gene_hash, \%mRNA_hash, 'Gene:mRNA')){
 					$validation_string .= "mRNA:$mRNA_ID|$validation_text;";
 					$mRNA_validation_status += $validation_error_code{GFF_mRNA};
 				}
 				
+        # Check exons errors
 				my @exons = $mRNA->get_SeqFeatures('exon');
 				my $exon_error = 0;
 				foreach my $exon (@exons){
@@ -148,28 +160,31 @@ sub validate_gene {
 				
 				}
 				
-				if($exon_error){ $mRNA_validation_status += $validation_error_code{GFF_exon}; } 
+				if ($exon_error) {
+          $mRNA_validation_status += $validation_error_code{GFF_exon};
+        } 
 				
-				my $CDS_sequence   = Initialize::get_CDS($mRNA,$validation_fh);
-				unless($CDS_sequence){$errorLog->error("No CDS for $mRNA_ID");}
-				my $prot_seq       = Initialize::get_translation($CDS_sequence,$mRNA_hash{strand});
-				unless($prot_seq){$errorLog->error("No translation for $mRNA_ID");}
-				my $sequence_check = _check_seq($prot_seq,\$validation_text);
+        # Check CDS sequence errors
+				my $CDS_sequence   = Initialize::get_CDS($mRNA, $validation_fh);
+				unless ($CDS_sequence) { $errorLog->error("No CDS for $mRNA_ID"); }
+				my $prot_seq       = Initialize::get_translation($CDS_sequence, $mRNA_hash{strand});
+				unless ($prot_seq) { $errorLog->error("No translation for $mRNA_ID"); }
+				my $sequence_check = _check_seq($prot_seq, \$validation_text);
 				
-				if($sequence_check ne 'passed'){										
+				if ($sequence_check ne 'passed') {										
 					$validation_string .= "mRNA:$mRNA_ID";
 					$validation_string .= "$validation_text;";
 					$errorLog->error($validation_string);
 					my($start_flag,$stop_flag,$internal_stop_count) = split /:/,$sequence_check;
-					if(!$start_flag){
+					if (!$start_flag) {
 						$mRNA_validation_status += $validation_error_code{CDS_start};
 					}
 					
-					if(!$stop_flag){
+					if (!$stop_flag) {
 						$mRNA_validation_status += $validation_error_code{CDS_stop};
 					}
 					
-					if(!$internal_stop_count == 0){
+					if (!$internal_stop_count == 0) {
 						$mRNA_validation_status += $validation_error_code{CDS_internal_stop};
 					}
 					
@@ -178,46 +193,66 @@ sub validate_gene {
 				$mRNA->add_tag_value('validation_error_code' => $mRNA_validation_status);
 				$mRNA->update();
 		};
+
     #warn "$mRNA_validation_status : $validation_error_code{CDS_stop} : $NO_STOP";
-		if($@){
-			$errorLog->error($@);
-			$gene_validation_status = -1;
-		}elsif($mRNA_validation_status and $gene_validation_status > -1 and $gene_validation_status < $mRNA_validation_status){
-			if($mRNA_validation_status == $validation_error_code{CDS_start} and  $NO_ATG == 2){
-				#approved
-				$gene_validation_status = 0;
-			}elsif($mRNA_validation_status == $validation_error_code{CDS_stop} and $NO_STOP == 2){
-				#approved
-				$gene_validation_status = 0;
-			}elsif(($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start})) and $NO_ATG == 2 and $NO_STOP == 2){
-				#approved
-				$gene_validation_status = 0;
-			}elsif($mRNA_validation_status == $validation_error_code{CDS_start} and $NO_ATG == 1){
-				$gene_validation_status = $mRNA_validation_status;				
-			}elsif($mRNA_validation_status == $validation_error_code{CDS_stop} and $NO_STOP == 1){
-				$gene_validation_status = $mRNA_validation_status;	
-			}elsif(($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start})) and $NO_ATG == 1 and $NO_STOP == 1){
-				$gene_validation_status = $mRNA_validation_status;
-			}else{$gene_validation_status = -$mRNA_validation_status;}
-		}		
+    if ($@) {
+      $errorLog->error($@);
+      $gene_validation_status = -1;
+
+    # We have some mRNA errors to check
+    } elsif ($mRNA_validation_status and $gene_validation_status > -1
+        and $gene_validation_status < $mRNA_validation_status) {
+
+      # Approve missing CDS start codon
+      if ($mRNA_validation_status == $validation_error_code{CDS_start}
+          and  $NO_ATG == 2) {
+        $gene_validation_status = 0;
+
+      # Approve missing stop codon
+      } elsif ($mRNA_validation_status == $validation_error_code{CDS_stop}
+          and $NO_STOP == 2) {
+        $gene_validation_status = 0;
+
+      # Approve both missing stop and start codon
+      } elsif (($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start}))
+          and $NO_ATG == 2 and $NO_STOP == 2) {
+        $gene_validation_status = 0;
+
+      # Add the mRNA error to the gene 
+      # Missing CDS start codon
+      } elsif ($mRNA_validation_status == $validation_error_code{CDS_start}
+          and $NO_ATG == 1) {
+        $gene_validation_status = $mRNA_validation_status;
+        
+      # Missing stop codon
+      } elsif ($mRNA_validation_status == $validation_error_code{CDS_stop}
+          and $NO_STOP == 1) {
+        $gene_validation_status = $mRNA_validation_status;
+        
+      # Missing both start and stop codon
+      } elsif (($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start}))
+          and $NO_ATG == 1 and $NO_STOP == 1) {
+        $gene_validation_status = $mRNA_validation_status;
+      
+      # Other?
+      } else {
+        $gene_validation_status = -$mRNA_validation_status;
+      }
+    }		
 	}
 	
-	if($gene_validation_status){
+  # Log if any error found
+	if ($gene_validation_status) {
 		my $gene_id = $gene_attb{load_id}->[0];
-		my $owner =   $gene_attb{owner}->[0];
-		
-		if(!$owner){
-			$owner = 'None';
-		}
+		my $owner =   $gene_attb{owner}->[0] || 'None';
 		
 		print $validation_fh "gene:$gene_id\t$owner\t$validation_string\n";
-	
 	}
 	$gene->add_tag_value('validation_error_code' => $gene_validation_status);
 	return $gene_validation_status;
 }
 
-sub _check_subfeature{
+sub _check_subfeature {
 	my($validation_text,$ID,$feature,$sub_feature,$key) = @_;
 	my $passed = 1;	
 	my ($feature_name,$sub_feature_name) = split /:/,$key;

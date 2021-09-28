@@ -81,7 +81,7 @@ sub resolve_maptype_cluster {
 			_new_gene($dbh,$cluster_id);	
 		}elsif(($cap_gene_count == 1 and $vb_gene_count == 1) and ($cap_transcript_count == $vb_transcript_count)){#gene change or identical gene
 			if(_identical_genes($dbh,$cluster_id)){
-			
+			  
 			}else{			
 				_exon_change($dbh,$cluster_id,$cap_max_error,$vb_max_error);
 			}
@@ -95,7 +95,9 @@ sub resolve_maptype_cluster {
 			_merge_gene($dbh,$cluster_id);
 		}elsif($cap_gene_count > 1 and $vb_gene_count > 1){ #complex loci i.e merge and split
 			_complex_split_merge_gene($dbh,$cluster_id);		
-		}else{$errorLog->error("Cluster $cluster_id was not processed");}#error
+		} else {
+      $errorLog->error("Cluster $cluster_id was not processed");
+    }
 	}
 		
 }
@@ -297,7 +299,7 @@ sub _exon_change{
 		        );
 	my $errorLog = Log::Log4perl->get_logger("errorlogger");
 	
-	if($cap_max_error > $vb_max_error){
+	if (defined $cap_max_error and defined $vb_max_error and $cap_max_error > $vb_max_error){
 		$errorLog->error("Cluster $cluster_id was not processed, because cap gene had more errors than reference.");
 		return;
 	} 
