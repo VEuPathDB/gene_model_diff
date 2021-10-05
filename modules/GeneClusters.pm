@@ -271,25 +271,26 @@ sub get_max_error {
 	return($max_cap,$max_vb);	
 }
 
-sub _recursive_cluster_genes{
-    my($dbh,$cap_gene_array,$gene_cluster) = @_;
-    if(scalar @{$cap_gene_array} == 0){
-    	return 1;
+sub _recursive_cluster_genes {
+  my($dbh, $cap_gene_array, $gene_cluster) = @_;
+  if (scalar @{$cap_gene_array} == 0) {
+    return 1;
+  }
+
+  my $cap_gene_id = shift @{$cap_gene_array};
+  if (!exists $gene_cluster->{cap}{$cap_gene_id}){
+    $gene_cluster->{cap}{$cap_gene_id} = 1;
+    my $vb_gene_ids  = _get_gene_via_mapped_exons($dbh, $cap_gene_id, 'cap', 'vb');
+
+    foreach my $vb_gene_id (@{$vb_gene_ids}) {
+      if (!exists $gene_cluster->{vb}{$vb_gene_id}) {
+        $gene_cluster->{vb}{$vb_gene_id} = 1;
+        my $cap_gene_ids = _get_gene_via_mapped_exons($dbh,$vb_gene_id, 'vb', 'cap');				
+        push(@{$cap_gene_array}, @{$cap_gene_ids});
+      }
     }
-    
-    my $cap_gene_id  = shift @{$cap_gene_array};
-    if(!exists $gene_cluster->{cap}{$cap_gene_id}){
-    	$gene_cluster->{cap}{$cap_gene_id} =1;
-		my $vb_gene_ids  = _get_gene_via_mapped_exons($dbh,$cap_gene_id,'cap','vb');
-		foreach my $vb_gene_id (@{$vb_gene_ids}){
-			if(!exists $gene_cluster->{vb}{$vb_gene_id}){
-				$gene_cluster->{vb}{$vb_gene_id} = 1;
-				my $cap_gene_ids = _get_gene_via_mapped_exons($dbh,$vb_gene_id,'vb','cap');				
-				push(@{$cap_gene_array},@{$cap_gene_ids});
-			}
-		}
-    }
-    _recursive_cluster_genes($dbh,$cap_gene_array,$gene_cluster);
+  }
+  _recursive_cluster_genes($dbh, $cap_gene_array, $gene_cluster);
 }
 
 sub _get_gene_via_mapped_exons{
@@ -371,3 +372,4 @@ sub _submit_sql {
 }
 
 1;
+
