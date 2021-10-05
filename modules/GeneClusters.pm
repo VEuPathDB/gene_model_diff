@@ -310,7 +310,68 @@ sub _get_gene_via_mapped_exons{
     	    	}
 			}	
 	}
+  
+  @return_gene_ids = _filter_overlapping_cds($dbh, $query_gene_id, \@return_gene_ids, $query_source, $return_source);
+  
 	return \@return_gene_ids;
+}
+
+# Filter out all gene pairs that do not have any overlapping CDSs
+sub _filter_overlapping_cds {
+  my ($dbh, $query_gene_id, $return_gene_ids, $query_source, $return_source) = @_;
+
+  # Get all CDSs for the query gene
+  my $query_transcripts = GeneModel::get_transcripts_by_gene_id($dbh, $query_gene_id, $query_source);
+  my @query_cdss = ();
+  for my $query_tr (@$query_transcripts) {
+    my $qcdss = CDS::get_all_cds_pos_by_parent_id($dbh, $query_tr);
+    push @query_cdss, @$qcdss;
+  }
+  @query_cdss = sort { $a->[0] <=> $b->[0] or $a->[1] <=> $b->[1] } @query_cdss;
+  
+  my @ok_return_gene_ids;
+  for my $return_gene_id (@$return_gene_ids) {
+    
+    # Get all CDSs for that return gene
+    my $return_transcripts = GeneModel::get_transcripts_by_gene_id($dbh, $return_gene_id, $return_source);
+    
+    my @return_cdss;
+    for my $transcript (@$return_transcripts) {
+      my $rcdss = CDS::get_all_cds_pos_by_parent_id($dbh, $transcript);
+      push @return_cdss, @$rcdss;
+    }
+    @return_cdss = sort { $a->[0] <=> $b->[0] or $a->[1] <=> $b->[1] } @return_cdss;
+    
+    # See if the CDSs overlap
+    # Only keep the genes that overlap even a little with a CDS
+    if (_overlapping_regions(\@query_cdss, \@return_cdss)) {
+      push @ok_return_gene_ids, $return_gene_id;
+    }
+  }
+  
+  return @ok_return_gene_ids;
+}
+
+# Very basic comparison of 2 sets of ordered arrays of regions
+# Each an array of 2 values: start and end (integers)
+sub _overlapping_regions {
+  my ($regions1, $regions2) = @_;
+  
+    REG1: for my $reg1 (@$regions1) {
+      my ($start1, $end1) = @$reg1;
+      
+      REG2: for my $reg2 (@$regions2) {
+        my ($start2, $end2) = @$reg2;
+        
+        next REG1 if $start2 > $end1;
+        next REG2 if $start1 > $end2;
+        
+        # Overlap!
+        return 1;
+      }
+    }
+
+    return 0;
 }
 
 sub _insert_gene_cluster{
