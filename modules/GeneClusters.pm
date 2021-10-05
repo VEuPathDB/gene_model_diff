@@ -65,20 +65,20 @@ use ExonMapping;
  Args: Database handle object
 =cut
 
-sub work_out_gene_clusters{
+sub work_out_gene_clusters {
 	my($dbh) = @_;
 	my %added_cap_genes;
-	my $cap_gene_model_ref = GeneModel::get_distinct_id_by_source($dbh,'gene','cap');
-	foreach my $cap_gene_id_ref (@{$cap_gene_model_ref}){
-		if(!exists $added_cap_genes{$cap_gene_id_ref->[0]}){
-			my %gene_cluster;			
-			_recursive_cluster_genes($dbh,$cap_gene_id_ref,\%gene_cluster);
-			_insert_gene_cluster($dbh,\%gene_cluster);
-			foreach my $cap_gene_id (keys $gene_cluster{cap}){				
+	my $cap_gene_model_ref = GeneModel::get_distinct_id_by_source($dbh, 'gene', 'cap');
+	foreach my $cap_gene_id_ref (@{$cap_gene_model_ref}) {
+		if(!exists $added_cap_genes{$cap_gene_id_ref->[0]}) {
+			my %gene_cluster;	
+			_recursive_cluster_genes($dbh, $cap_gene_id_ref, \%gene_cluster);
+			_insert_gene_cluster($dbh, \%gene_cluster);
+			foreach my $cap_gene_id (keys %{$gene_cluster{cap}}) {
 				$added_cap_genes{$cap_gene_id} = 1; 
-			}		
-		}		
-	}	
+			}
+		}
+	}
 }
 
 =head2 calculate_cluster_summary
