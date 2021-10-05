@@ -96,7 +96,7 @@ sub validate_gene {
 	
 	my @RNAs = $gene->get_SeqFeatures('mRNA');
 	my $gene_validation_status = 0;
-	my $validation_string;
+	my $validation_string = '';
 	
 	foreach my $mRNA (@RNAs) {
 		my %mRNA_hash;
