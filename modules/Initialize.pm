@@ -71,15 +71,16 @@ my $loader;
  Title: load_gene_set
  Usage: Initialize::load_gene_set($dbh,$config,$validation_file,$source,$gff_file,$fasta_file,$dsn,$user,$pass)
  Function: load the gff into a SeqFeature Store database, then loads validated genes into the gene_model table.
- Returns: Counts of genes: before load, Unfinished, faild validation, total loaded.
+ Returns: Counts of genes: before load, Obsolete, Unfinished, faild validation, total loaded.
  Args: Database handle object, config object,source of GFF, GFF file,FASTA file,database connection details (dns),user,pass
 =cut
 
 sub load_gene_set {
 	my($dbh,$config,$validation_file,$source,$gff_file,$fasta_file,$dsn,$user,$pass) = @_;
-	my $not_finished=0;
-	my $not_validated=0;
-	my $total_loaded=0;
+	my $obsolete = 0;
+	my $not_finished = 0;
+	my $not_validated = 0;
+	my $total_loaded = 0;
 	my $infoLog = Log::Log4perl->get_logger("infologger");
 	my $pre_loaded = _gff_load($gff_file,$fasta_file,$dsn,$user,$pass);
 	
@@ -89,11 +90,16 @@ sub load_gene_set {
 		
 		my %attb = $gene->attributes;
 	
+    # Exclude some gene models
 		if($source eq 'cap'){
-			unless(defined($attb{status}->[0]) and ($attb{status}->[0] =~ /^Finished|Finished annotation$/)){
+			if( _gene_is_obsolete(\%attb) ) {
+				$obsolete++;
+				next;
+			}
+			if (not _gene_is_finished(\%attb) ) {
 				$not_finished++;
 				next;
-			}			
+			}
 		}
 		
 		my $passed_validation = Validate::validate_gene($gene,$config,$validation_fh);
@@ -116,7 +122,17 @@ sub load_gene_set {
 		$total_loaded++;
 	}
 	
-	return($pre_loaded,$not_finished,$not_validated,$total_loaded);
+	return($pre_loaded, $obsolete, $not_finished, $not_validated, $total_loaded);
+}
+
+sub _gene_is_obsolete {
+  my ($attrib) = @_;
+	return defined($attrib->{obsolete}->[0]) and ($attrib->{obsolete}->[0] eq 'true');
+}
+
+sub _gene_is_finished {
+  my ($attrib) = @_;
+	return defined($attrib->{status}->[0]) and ($attrib->{status}->[0] =~ /^Finished|Finished annotation$/);
 }
 
 sub _gff_load {
