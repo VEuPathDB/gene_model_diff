@@ -164,7 +164,10 @@ sub load_data_base {
 	my $core_gff   = "$datadir/$species/core.gff";
 	my $cap_fasta  = "$datadir/$species/cap.fasta";
 	my $core_fasta = "$datadir/$species/core.fasta";
+  
 	my $validation_file = "$datadir/$species/gff_validation_error.txt";
+  # Reinit this file
+  { open my $valh, ">", $validation_file; }
 	
 	my $dns  = "dbi:mysql:$load_database:$host:$port";	
 	$dbh = get_dbh($config,$species);
