@@ -91,8 +91,8 @@ sub load_gene_set {
 		my %attb = $gene->attributes;
 	
     # Exclude some gene models
-		if($source eq 'cap'){
-			if( _gene_is_obsolete(\%attb) ) {
+		if ($source eq 'cap'){
+			if ( _gene_is_obsolete(\%attb) ) {
 				$obsolete++;
 				next;
 			}
@@ -127,12 +127,16 @@ sub load_gene_set {
 
 sub _gene_is_obsolete {
   my ($attrib) = @_;
-	return defined($attrib->{obsolete}->[0]) and ($attrib->{obsolete}->[0] eq 'true');
+  my $obsolete = $attrib->{obsolete}->[0];
+  
+	return (defined($obsolete) and $obsolete eq 'true');
 }
 
 sub _gene_is_finished {
   my ($attrib) = @_;
-	return defined($attrib->{status}->[0]) and ($attrib->{status}->[0] =~ /^Finished|Finished annotation$/);
+  
+  my $status = $attrib->{status}->[0];
+	return (defined($status) and $status =~ /^Finished|Finished annotation$/);
 }
 
 sub _gff_load {
