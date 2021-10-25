@@ -165,19 +165,23 @@ sub load_data_base {
 	my $cap_fasta  = "$datadir/$species/cap.fasta";
 	my $core_fasta = "$datadir/$species/core.fasta";
   
-	my $validation_file = "$datadir/$species/gff_validation_error.txt";
+	my $validation_file_cap = "$datadir/$species/gff_validation_error_cap.txt";
   # Reinit this file
-  { open my $valh, ">", $validation_file; }
+  { open my $valh, ">", $validation_file_cap; }
+	
+	my $validation_file_core = "$datadir/$species/gff_validation_error_core.txt";
+  # Reinit this file
+  { open my $valh, ">", $validation_file_core; }
 	
 	my $dns  = "dbi:mysql:$load_database:$host:$port";	
 	$dbh = get_dbh($config,$species);
 	
 	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
 	
-	my ($cap_pre_loaded, $cap_obsolete, $cap_not_finished, $cap_not_validated, $cap_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file, 'cap', $cap_gff, $cap_fasta, $dns, $user, $pass);
+	my ($cap_pre_loaded, $cap_obsolete, $cap_not_finished, $cap_not_validated, $cap_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file_cap, 'cap', $cap_gff, $cap_fasta, $dns, $user, $pass);
 	warn "Stats: loaded=$cap_pre_loaded, obsolete=$cap_obsolete, not_finished=$cap_not_finished, not_validated=$cap_not_validated, total_loaded=$cap_total_loaded\n";
 	if($cap_total_loaded){
-		my ($vb_pre_loaded, $vb_obsolete, $vb_not_finished, $vb_not_validated, $vb_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file, 'vb', $pruned_core_gff, $core_fasta, $dns, $user, $pass);
+		my ($vb_pre_loaded, $vb_obsolete, $vb_not_finished, $vb_not_validated, $vb_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file_core, 'vb', $pruned_core_gff, $core_fasta, $dns, $user, $pass);
 	}
 	return $cap_total_loaded;
  	
