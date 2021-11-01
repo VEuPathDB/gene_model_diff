@@ -91,7 +91,10 @@ my $dbh;
 my %options;
 my $result = GetOptions(\%options,
 		'config|f=s',
-		'speciesFile=s') || pod2usage(2);
+		'speciesFile=s') or pod2usage(2);
+
+if (not $options{config}) { print "Missing --config\n"; pod2usage(2); }
+if (not $options{speciesFile}) { print "Missing --speciesFile\n"; pod3usage(2); }
 #------------------------------------------------#
 
 my $config = readConfig($options{config});
