@@ -102,6 +102,11 @@ my $datadir= $config->val('Data','datadir');
 my $scriptdir = $FindBin::Bin;
 my $species_list = get_species($options{speciesFile});
 my $log_file = $config->val('Data','log_file');
+
+if (not ($log_file)) {
+  $log_file = "$FindBin::Bin/../config/gene_model_logFile.conf";
+  print STDERR "Using default log config from $log_file\n";
+}
 Log::Log4perl->init($log_file);
 
 foreach my $species (@{$species_list}){
