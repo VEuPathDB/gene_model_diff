@@ -54,15 +54,33 @@ use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use DBI;
 
-=head2 get_all_cds_by_parent_id
+=head2 get_all_cds_pos_by_parent_id
 
- Title:    get_all_cds_by_parent_id	
- Usage:    CDS::get_cds_pos_by_parent_id($dbh,$parent_id);
+ Title:    get_all_cds_pos_by_parent_id	
+ Usage:    CDS::get_all_cds_pos_by_parent_id($dbh,$parent_id);
  Function: get start and end position for CDS. 	
  Returns:  list (start,end). 	
  Args:     Database handle object,parent mRNA ID. 
 =cut 
 
+sub get_all_cds_pos_by_parent_id{
+	my($dbh, $parent_id) = @_;
+	
+	my $sql = "select start,end from cds where cds_parent_id = \'$parent_id\';";
+	my $array_ref = $dbh->selectall_arrayref($sql);
+  return $array_ref;
+}
+
+
+######## UNCLEAR??
+=head2 get_cds_pos_by_parent_id
+
+ Title:    get_cds_pos_by_parent_id	
+ Usage:    CDS::get_cds_pos_by_parent_id($dbh,$parent_id);
+ Function: get start and end position for the first CDS. 	
+ Returns:  list (start,end). 	
+ Args:     Database handle object,parent mRNA ID. 
+=cut 
 sub get_cds_pos_by_parent_id{
 	my($dbh,$parent_id) = @_;
 	

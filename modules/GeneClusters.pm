@@ -65,20 +65,20 @@ use ExonMapping;
  Args: Database handle object
 =cut
 
-sub work_out_gene_clusters{
+sub work_out_gene_clusters {
 	my($dbh) = @_;
 	my %added_cap_genes;
-	my $cap_gene_model_ref = GeneModel::get_distinct_id_by_source($dbh,'gene','cap');
-	foreach my $cap_gene_id_ref (@{$cap_gene_model_ref}){
-		if(!exists $added_cap_genes{$cap_gene_id_ref->[0]}){
-			my %gene_cluster;			
-			_recursive_cluster_genes($dbh,$cap_gene_id_ref,\%gene_cluster);
-			_insert_gene_cluster($dbh,\%gene_cluster);
-			foreach my $cap_gene_id (keys $gene_cluster{cap}){				
+	my $cap_gene_model_ref = GeneModel::get_distinct_id_by_source($dbh, 'gene', 'cap');
+	foreach my $cap_gene_id_ref (@{$cap_gene_model_ref}) {
+		if(!exists $added_cap_genes{$cap_gene_id_ref->[0]}) {
+			my %gene_cluster;	
+			_recursive_cluster_genes($dbh, $cap_gene_id_ref, \%gene_cluster);
+			_insert_gene_cluster($dbh, \%gene_cluster);
+			foreach my $cap_gene_id (keys %{$gene_cluster{cap}}) {
 				$added_cap_genes{$cap_gene_id} = 1; 
-			}		
-		}		
-	}	
+			}
+		}
+	}
 }
 
 =head2 calculate_cluster_summary
@@ -271,25 +271,26 @@ sub get_max_error {
 	return($max_cap,$max_vb);	
 }
 
-sub _recursive_cluster_genes{
-    my($dbh,$cap_gene_array,$gene_cluster) = @_;
-    if(scalar @{$cap_gene_array} == 0){
-    	return 1;
+sub _recursive_cluster_genes {
+  my($dbh, $cap_gene_array, $gene_cluster) = @_;
+  if (scalar @{$cap_gene_array} == 0) {
+    return 1;
+  }
+
+  my $cap_gene_id = shift @{$cap_gene_array};
+  if (!exists $gene_cluster->{cap}{$cap_gene_id}){
+    $gene_cluster->{cap}{$cap_gene_id} = 1;
+    my $vb_gene_ids  = _get_gene_via_mapped_exons($dbh, $cap_gene_id, 'cap', 'vb');
+
+    foreach my $vb_gene_id (@{$vb_gene_ids}) {
+      if (!exists $gene_cluster->{vb}{$vb_gene_id}) {
+        $gene_cluster->{vb}{$vb_gene_id} = 1;
+        my $cap_gene_ids = _get_gene_via_mapped_exons($dbh,$vb_gene_id, 'vb', 'cap');				
+        push(@{$cap_gene_array}, @{$cap_gene_ids});
+      }
     }
-    
-    my $cap_gene_id  = shift @{$cap_gene_array};
-    if(!exists $gene_cluster->{cap}{$cap_gene_id}){
-    	$gene_cluster->{cap}{$cap_gene_id} =1;
-		my $vb_gene_ids  = _get_gene_via_mapped_exons($dbh,$cap_gene_id,'cap','vb');
-		foreach my $vb_gene_id (@{$vb_gene_ids}){
-			if(!exists $gene_cluster->{vb}{$vb_gene_id}){
-				$gene_cluster->{vb}{$vb_gene_id} = 1;
-				my $cap_gene_ids = _get_gene_via_mapped_exons($dbh,$vb_gene_id,'vb','cap');				
-				push(@{$cap_gene_array},@{$cap_gene_ids});
-			}
-		}
-    }
-    _recursive_cluster_genes($dbh,$cap_gene_array,$gene_cluster);
+  }
+  _recursive_cluster_genes($dbh, $cap_gene_array, $gene_cluster);
 }
 
 sub _get_gene_via_mapped_exons{
@@ -309,7 +310,68 @@ sub _get_gene_via_mapped_exons{
     	    	}
 			}	
 	}
+  
+  @return_gene_ids = _filter_overlapping_cds($dbh, $query_gene_id, \@return_gene_ids, $query_source, $return_source);
+  
 	return \@return_gene_ids;
+}
+
+# Filter out all gene pairs that do not have any overlapping CDSs
+sub _filter_overlapping_cds {
+  my ($dbh, $query_gene_id, $return_gene_ids, $query_source, $return_source) = @_;
+
+  # Get all CDSs for the query gene
+  my $query_transcripts = GeneModel::get_transcripts_by_gene_id($dbh, $query_gene_id, $query_source);
+  my @query_cdss = ();
+  for my $query_tr (@$query_transcripts) {
+    my $qcdss = CDS::get_all_cds_pos_by_parent_id($dbh, $query_tr);
+    push @query_cdss, @$qcdss;
+  }
+  @query_cdss = sort { $a->[0] <=> $b->[0] or $a->[1] <=> $b->[1] } @query_cdss;
+  
+  my @ok_return_gene_ids;
+  for my $return_gene_id (@$return_gene_ids) {
+    
+    # Get all CDSs for that return gene
+    my $return_transcripts = GeneModel::get_transcripts_by_gene_id($dbh, $return_gene_id, $return_source);
+    
+    my @return_cdss;
+    for my $transcript (@$return_transcripts) {
+      my $rcdss = CDS::get_all_cds_pos_by_parent_id($dbh, $transcript);
+      push @return_cdss, @$rcdss;
+    }
+    @return_cdss = sort { $a->[0] <=> $b->[0] or $a->[1] <=> $b->[1] } @return_cdss;
+    
+    # See if the CDSs overlap
+    # Only keep the genes that overlap even a little with a CDS
+    if (_overlapping_regions(\@query_cdss, \@return_cdss)) {
+      push @ok_return_gene_ids, $return_gene_id;
+    }
+  }
+  
+  return @ok_return_gene_ids;
+}
+
+# Very basic comparison of 2 sets of ordered arrays of regions
+# Each an array of 2 values: start and end (integers)
+sub _overlapping_regions {
+  my ($regions1, $regions2) = @_;
+  
+    REG1: for my $reg1 (@$regions1) {
+      my ($start1, $end1) = @$reg1;
+      
+      REG2: for my $reg2 (@$regions2) {
+        my ($start2, $end2) = @$reg2;
+        
+        next REG1 if $start2 > $end1;
+        next REG2 if $start1 > $end2;
+        
+        # Overlap!
+        return 1;
+      }
+    }
+
+    return 0;
 }
 
 sub _insert_gene_cluster{
@@ -371,3 +433,4 @@ sub _submit_sql {
 }
 
 1;
+
