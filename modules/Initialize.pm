@@ -85,6 +85,11 @@ sub load_gene_set {
 	my $pre_loaded = _gff_load($gff_file,$fasta_file,$dsn,$user,$pass);
 	
 	my @genes = $db->get_features_by_type('gene');
+	my @prot_genes = $db->get_features_by_type('protein_coding_gene');
+  
+  print(scalar(@genes) . " biotype 'gene'\n");
+  print(scalar(@prot_genes) . " biotype 'protein_coding_gene'\n");
+  @genes = (@genes, @prot_genes);
     open my $validation_fh,'>>',$validation_file;
 	foreach my $gene (@genes){
 		
