@@ -91,7 +91,10 @@ my $dbh;
 my %options;
 my $result = GetOptions(\%options,
 		'config|f=s',
-		'speciesFile=s') || pod2usage(2);
+		'speciesFile=s') or pod2usage(2);
+
+if (not $options{config}) { print "Missing --config\n"; pod2usage(2); }
+if (not $options{speciesFile}) { print "Missing --speciesFile\n"; pod3usage(2); }
 #------------------------------------------------#
 
 my $config = readConfig($options{config});
@@ -99,6 +102,11 @@ my $datadir= $config->val('Data','datadir');
 my $scriptdir = $FindBin::Bin;
 my $species_list = get_species($options{speciesFile});
 my $log_file = $config->val('Data','log_file');
+
+if (not ($log_file)) {
+  $log_file = "$FindBin::Bin/../config/gene_model_logFile.conf";
+  print STDERR "Using default log config from $log_file\n";
+}
 Log::Log4perl->init($log_file);
 
 foreach my $species (@{$species_list}){
