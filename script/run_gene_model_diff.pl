@@ -212,6 +212,9 @@ sub prune_gff_by_scaffold {
 		next if not $scaffold;
 		$cap_scaffold{$scaffold} = 1;
 	}
+  
+	my %known_cap_scaffold = %cap_scaffold;
+  my $n_total = scalar(keys %known_cap_scaffold);
 	
 	while (my $line = <$core_fh>) {		
 		next if $line =~ /^###/;
@@ -222,9 +225,17 @@ sub prune_gff_by_scaffold {
       next if not $scaffold;
 			if (exists $cap_scaffold{$scaffold}) {
 				print $pruned_core_gff_fh $line;
+        delete $known_cap_scaffold{$scaffold};
 			}
 		}
 	}
+  
+  # Check that all scaffolds have been found
+  if (%known_cap_scaffold) {
+    my $n_left = scalar(keys %known_cap_scaffold);
+    die("$n_left/$n_total scaffolds from the cap.gff have not been found in the core.gff");
+  }
+  
 	return $pruned_core_gff;	
 }
 
