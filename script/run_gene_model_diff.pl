@@ -367,6 +367,7 @@ sub write_gff_to_load {
 		chomp $line;
 		
 		my @columns = split/\t/, $line;
+    next if @columns == 0;
     if (scalar(@columns) != 9) {
       warn("Not 9 columns in the gff: $line\n");
     }
