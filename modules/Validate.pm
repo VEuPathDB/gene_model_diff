@@ -93,6 +93,7 @@ sub validate_gene {
 	$gene_hash{strand}   = $gene->strand;
 	$gene_hash{start}    = $gene->start;
 	$gene_hash{end}      = $gene->end;
+	my $strand = $gene->strand;
 	
 	my @RNAs = $gene->get_SeqFeatures('mRNA');
 	my $gene_validation_status = 0;
@@ -105,26 +106,38 @@ sub validate_gene {
 		
 		my $NO_ATG = 0;
 		my $NO_STOP = 0;
+
+		my $has_no_atg = exists $mRNA_attb{'no-ATG'};
+		my $has_no_stop = exists $mRNA_attb{'no-STOP'};
+		my $has_author = (exists $mRNA_attb{owner} and $validation_approved_email{ $mRNA_attb{owner}->[0] });
+		my $is_left_partial = (exists $mRNA_attb{'is_fmin_partial'} and ($mRNA_attb{'is_fmin_partial'}->[0] eq 'true'));
+		my $is_right_partial = (exists $mRNA_attb{'is_fmax_partial'} and ($mRNA_attb{'is_fmax_partial'}->[0] eq 'true'));
+		my $is_start_partial = (($strand == 1 and $is_left_partial) or ($strand == '-1' and $is_right_partial));
+		my $is_end_partial = (($strand == 1 and $is_right_partial) or ($strand == '-1' and $is_left_partial));
     
     # Check both missing start/stop codon
     # and allow if partial, or owner approved
-		if (exists $mRNA_attb{'no-ATG'}) {
-			if (exists $validation_approved_email{$mRNA_attb{owner}->[0]}
-          or exists $mRNA_attb{'is_fmin_partial'}) {
+		if ($has_no_atg) {
+			if ($has_author) {
 				$NO_ATG = 2;
 			} else {
         $NO_ATG = 1;
       }
 		}
+    if ($is_start_partial) {
+      $NO_ATG = 2;
+    }
 		
-		if (exists $mRNA_attb{'no-STOP'}) {
-			if (exists $validation_approved_email{$mRNA_attb{owner}->[0]}
-          or exists $mRNA_attb{'is_fmax_partial'}) {
+		if ($has_no_stop) {
+			if ($has_author or $is_end_partial) {
 				$NO_STOP = 2;
 			} else {
         $NO_STOP = 1;
       }
 		}
+    if ($is_end_partial) {
+      $NO_STOP = 2;
+    }
 				
 		eval {
 				my $mRNA_ID   = $mRNA_attb{load_id}->[0];
