@@ -106,6 +106,7 @@ sub validate_gene {
 		
 		my $NO_ATG = 0;
 		my $NO_STOP = 0;
+		my $INTERNAL_STOP = 0;
 
 		my $has_no_atg = exists $mRNA_attb{'no-ATG'};
 		my $has_no_stop = exists $mRNA_attb{'no-STOP'};
@@ -114,6 +115,8 @@ sub validate_gene {
 		my $is_right_partial = (exists $mRNA_attb{'is_fmax_partial'} and ($mRNA_attb{'is_fmax_partial'}->[0] eq 'true'));
 		my $is_start_partial = (($strand == 1 and $is_left_partial) or ($strand == '-1' and $is_right_partial));
 		my $is_end_partial = (($strand == 1 and $is_right_partial) or ($strand == '-1' and $is_left_partial));
+		my $stop_seleno = (exists $gene_attb{'Note'} and ($gene_attb{'Note'}->[0] eq 'stop_codon_redefined_as_selenocysteine'));
+
     
     # Check both missing start/stop codon
     # and allow if partial, or owner approved
@@ -137,6 +140,9 @@ sub validate_gene {
 		}
     if ($is_end_partial) {
       $NO_STOP = 2;
+    }
+    if ($stop_seleno) {
+      $INTERNAL_STOP = 2;
     }
 				
 		eval {
@@ -226,9 +232,19 @@ sub validate_gene {
           and $NO_STOP == 2) {
         $gene_validation_status = 0;
 
+      # Approve missing stop codon
+      } elsif ($mRNA_validation_status == $validation_error_code{CDS_internal_stop}
+          and $INTERNAL_STOP == 2) {
+        $gene_validation_status = 0;
+
       # Approve both missing stop and start codon
       } elsif (($mRNA_validation_status == ($validation_error_code{CDS_stop} + $validation_error_code{CDS_start}))
           and $NO_ATG == 2 and $NO_STOP == 2) {
+        $gene_validation_status = 0;
+
+      # Approve both internal stop and start codon
+      } elsif (($mRNA_validation_status == ($validation_error_code{CDS_internal_stop} + $validation_error_code{CDS_start}))
+          and $NO_ATG == 2 and $INTERNAL_STOP == 2) {
         $gene_validation_status = 0;
 
       # Add the mRNA error to the gene 
