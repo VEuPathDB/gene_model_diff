@@ -81,6 +81,7 @@ sub load_gene_set {
 	my $not_finished = 0;
 	my $not_validated = 0;
 	my $total_loaded = 0;
+	my $no_gene_model = 0;
 	my $infoLog = Log::Log4perl->get_logger("infologger");
 	my $pre_loaded = _gff_load($gff_file,$fasta_file,$dsn,$user,$pass);
 	
@@ -116,18 +117,20 @@ sub load_gene_set {
 				
 		my ($gene_model,$CDS_present) = _build_gene_model($gene);
 	    
-		if(%{$gene_model}){
+		if($gene_model and %{$gene_model}){
 			_insert_gene_model($gene_model,$dbh,$source);
 			_insert_exon($gene_model,$dbh,$source);
 			if($CDS_present){
 				_insert_CDS($gene_model,$dbh,$source);
 			}
-		}
+		} else {
+      $no_gene_model++;
+    }
 		
 		$total_loaded++;
 	}
 	
-	return($pre_loaded, $obsolete, $not_finished, $not_validated, $total_loaded);
+	return($pre_loaded, $obsolete, $not_finished, $not_validated, $no_gene_model, $total_loaded);
 }
 
 sub _gene_is_obsolete {
@@ -187,7 +190,7 @@ sub _build_gene_model {
 	$gene_model{validation_error_code} = $attb{validation_error_code}->[0];
 	
 	my @mRNAs = $gene->get_SeqFeatures('mRNA');
-	foreach my $mRNA (@mRNAs){
+  MRNA: foreach my $mRNA (@mRNAs){
 		my %mRNA_model;
 		my %rna_attb = $mRNA->attributes;
 		my $mRNA_validation_error_code = $rna_attb{validation_error_code}->[0];
@@ -200,6 +203,7 @@ sub _build_gene_model {
 		if(scalar(@CDS) > 0){
 			$CDS_present = 1;
 			my $CDS_sequence = get_CDS($mRNA,'');
+      return if not $CDS_sequence;
 			
 			my $prot_seq     = get_translation($CDS_sequence,$mRNA->strand);
 			my $md5_checksum = md5_hex($prot_seq);
@@ -252,8 +256,10 @@ sub get_CDS {
 	my @CDS = $mrna_obj->get_SeqFeatures('CDS');
 	my %attb = $CDS[0]->attributes;
 	#only expects one CDS per mRNA, code will break if more.
-	if(scalar @CDS > 1){croak("more than one CDS for mRNA,
-							   only expects one CDS per mRNA, code will break if more. $attb{load_id}->[0]");}
+	if (scalar @CDS > 1) {
+    warn("more than one CDS for mRNA, only expects one CDS per mRNA, code will break if more. $attb{load_id}->[0]");
+    return;
+  }
 	my $CDS_start = $CDS[0]->start;
 	my $CDS_end   = $CDS[0]->end;
 	my $CDS_sequence;

@@ -186,10 +186,11 @@ sub load_data_base {
 	
 	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
 	
-	my ($cap_pre_loaded, $cap_obsolete, $cap_not_finished, $cap_not_validated, $cap_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file_cap, 'cap', $cap_gff, $cap_fasta, $dns, $user, $pass);
-	warn "Stats: loaded=$cap_pre_loaded, obsolete=$cap_obsolete, not_finished=$cap_not_finished, not_validated=$cap_not_validated, total_loaded=$cap_total_loaded\n";
+	my ($cap_pre_loaded, $cap_obsolete, $cap_not_finished, $cap_not_validated, $cap_no_gene_model, $cap_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file_cap, 'cap', $cap_gff, $cap_fasta, $dns, $user, $pass);
+	warn "CAP Stats: loaded=$cap_pre_loaded, obsolete=$cap_obsolete, not_finished=$cap_not_finished, not_validated=$cap_not_validated, no_gene_model=$cap_no_gene_model, total_loaded=$cap_total_loaded\n";
 	if($cap_total_loaded){
-		my ($vb_pre_loaded, $vb_obsolete, $vb_not_finished, $vb_not_validated, $vb_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file_core, 'vb', $pruned_core_gff, $core_fasta, $dns, $user, $pass);
+		my ($vb_pre_loaded, $vb_obsolete, $vb_not_finished, $vb_not_validated, $vb_no_gene_model, $vb_total_loaded) = Initialize::load_gene_set($dbh, $config, $validation_file_core, 'vb', $pruned_core_gff, $core_fasta, $dns, $user, $pass);
+	warn "VB Stats: loaded=$vb_pre_loaded, obsolete=$vb_obsolete, not_finished=$vb_not_finished, not_validated=$vb_not_validated, no_gene_model=$vb_no_gene_model, total_loaded=$vb_total_loaded\n";
 	}
 	return $cap_total_loaded;
  	
@@ -211,6 +212,9 @@ sub prune_gff_by_scaffold {
 		next if not $scaffold;
 		$cap_scaffold{$scaffold} = 1;
 	}
+  
+	my %known_cap_scaffold = %cap_scaffold;
+  my $n_total = scalar(keys %known_cap_scaffold);
 	
 	while (my $line = <$core_fh>) {		
 		next if $line =~ /^###/;
@@ -221,9 +225,17 @@ sub prune_gff_by_scaffold {
       next if not $scaffold;
 			if (exists $cap_scaffold{$scaffold}) {
 				print $pruned_core_gff_fh $line;
+        delete $known_cap_scaffold{$scaffold};
 			}
 		}
 	}
+  
+  # Check that all scaffolds have been found
+  if (%known_cap_scaffold) {
+    my $n_left = scalar(keys %known_cap_scaffold);
+    die("$n_left/$n_total scaffolds from the cap.gff have not been found in the core.gff");
+  }
+  
 	return $pruned_core_gff;	
 }
 
@@ -355,6 +367,7 @@ sub write_gff_to_load {
 		chomp $line;
 		
 		my @columns = split/\t/, $line;
+    next if @columns == 0;
     if (scalar(@columns) != 9) {
       warn("Not 9 columns in the gff: $line\n");
     }
