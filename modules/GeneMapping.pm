@@ -295,7 +295,8 @@ sub _exon_change{
 	my %ranks = (identical     => 1,
 		        exon_boundary  => 2,
 		        exon_number    => 3,
-		        CDS_change => 4
+		        CDS_change => 4,
+		        CDS_error => 5
 		        );
 	my $errorLog = Log::Log4perl->get_logger("errorlogger");
 	
