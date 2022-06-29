@@ -45,9 +45,12 @@ The genes that passes the validation is inserted into the gene model table.
 
 =cut
 
+
 package Initialize;
 use strict;
 use warnings;
+use v5.26;
+
 use DBI;
 use Data::Dumper;
 use autodie qw(:all);
@@ -57,6 +60,7 @@ use Digest::MD5 qw(md5_hex);
 use Validate;
 
 use Bio::Seq;
+use Bio::SeqIO;
 use Bio::DB::SeqFeature::Store;
 use Bio::DB::SeqFeature::Store::GFF3Loader;
 
@@ -76,13 +80,16 @@ my $loader;
 =cut
 
 sub load_gene_set {
-	my($dbh,$config,$validation_file,$source,$gff_file,$fasta_file,$dsn,$user,$pass) = @_;
+	my($dbh, $config, $validation_file, $source, $gff_file, $fasta_file, $dsn, $user, $pass, $prot_fasta) = @_;
 	my $obsolete = 0;
 	my $not_finished = 0;
 	my $not_validated = 0;
 	my $total_loaded = 0;
 	my $no_gene_model = 0;
 	my $infoLog = Log::Log4perl->get_logger("infologger");
+
+	my $proteins = _load_proteins($prot_fasta);
+
 	my $pre_loaded = _gff_load($gff_file,$fasta_file,$dsn,$user,$pass);
 	
 	my @genes = $db->get_features_by_type('gene');
@@ -95,6 +102,7 @@ sub load_gene_set {
 	foreach my $gene (@genes){
 		
 		my %attb = $gene->attributes;
+		my $gene_id = $attb{load_id}->[0];
 	
     # Exclude some gene models
 		if ($source eq 'cap'){
@@ -107,8 +115,7 @@ sub load_gene_set {
 				next;
 			}
 		}
-		
-		my $passed_validation = Validate::validate_gene($gene,$config,$validation_fh);
+		my $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
 		
 		if($source eq 'cap' and $passed_validation < 0){
 			$not_validated++;
@@ -131,6 +138,21 @@ sub load_gene_set {
 	}
 	
 	return($pre_loaded, $obsolete, $not_finished, $not_validated, $no_gene_model, $total_loaded);
+}
+
+sub _load_proteins {
+	my ($fasta_path) = @_;
+	return {} if not $fasta_path or not -s $fasta_path;
+
+	say("Loading proteins...");
+	my %prots;
+	my $n = 0;
+	my $prot_in = Bio::SeqIO->new(-file => $fasta_path, -format => "Fasta");
+	while (my $prot = $prot_in->next_seq()) {
+		my $id = $prot->id;
+		$prots{$id} = $prot->seq;
+	}
+	return \%prots;
 }
 
 sub _gene_is_obsolete {
@@ -257,7 +279,7 @@ sub get_CDS {
 	my %attb = $CDS[0]->attributes;
 	#only expects one CDS per mRNA, code will break if more.
 	if (scalar @CDS > 1) {
-    warn("more than one CDS for mRNA, only expects one CDS per mRNA, code will break if more. $attb{load_id}->[0]");
+    warn("more than one cds for mrna, only expects one cds per mrna, code will break if more. $attb{load_id}->[0]");
     return;
   }
 	my $CDS_start = $CDS[0]->start;
