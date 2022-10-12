@@ -135,15 +135,13 @@ sub run_species {
 	@merged_gene_counts=0;
 	@split_gene_counts=0;
 	
-	my $cap_total_loaded=0;
-	
 	warn "Running $species\n";
 	
     create_database($config,$species);		
-	$cap_total_loaded = load_data_base($config,$species);
+	my $genes_loaded = load_data_base($config,$species);
 	
 	$dbh = get_dbh($config,$species);	
-	if($cap_total_loaded){
+	if($genes_loaded){
 		run_gene_set_comparison($dbh);
 		
 		
@@ -173,60 +171,56 @@ sub load_data_base {
 	my $cap_fasta  = "$datadir/$species/cap.fasta";
 	my $core_fasta = "$datadir/$species/core.fasta";
 	my $cap_prot_fasta = "$datadir/$species/cap_protein.fasta";
-  
-	my $validation_file_cap = "$datadir/$species/gff_validation_error_cap.txt";
-  # Reinit this file
-  { open my $valh, ">", $validation_file_cap; }
 	
+	# Init new files
+	my $validation_file_cap = "$datadir/$species/gff_validation_error_cap.txt";
 	my $validation_file_core = "$datadir/$species/gff_validation_error_core.txt";
-  # Reinit this file
-  { open my $valh, ">", $validation_file_core; }
+	my $cap_stats_file = "$datadir/$species/stats_cap.txt";
+	my $core_stats_file = "$datadir/$species/stats_core.txt";
+	{ open my $valh, ">", $validation_file_cap; }
+	{ open my $valh, ">", $validation_file_core; }
 	
 	my $dns  = "dbi:mysql:$load_database:$host:$port";	
 	$dbh = get_dbh($config,$species);
 	
 	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
 	
-	my (
-		$cap_pre_loaded,
-		$cap_obsolete,
-		$cap_not_finished,
-		$cap_not_validated,
-		$cap_no_gene_model,
-		$cap_total_loaded) = Initialize::load_gene_set($dbh,
+	my $cap_stats = Initialize::load_gene_set($dbh,
+		$config,
+		$validation_file_cap,
+		'cap',
+		$cap_gff,
+		$cap_fasta,
+		$dns,
+		$user,
+		$pass,
+		$cap_prot_fasta,
+	);
+	print_stats($cap_stats, $cap_stats_file);
+	if($cap_stats->{genes}) {
+		my $core_stats = Initialize::load_gene_set(
+			$dbh,
 			$config,
-			$validation_file_cap,
-			'cap',
-			$cap_gff,
-			$cap_fasta,
+			$validation_file_core,
+			'vb',
+			$pruned_core_gff,
+			$core_fasta,
 			$dns,
 			$user,
 			$pass,
-			$cap_prot_fasta,
 		);
-	warn "CAP Stats: loaded=$cap_pre_loaded, obsolete=$cap_obsolete, not_finished=$cap_not_finished, not_validated=$cap_not_validated, no_gene_model=$cap_no_gene_model, total_loaded=$cap_total_loaded\n";
-	if($cap_total_loaded){
-		my (
-			$vb_pre_loaded,
-			$vb_obsolete,
-			$vb_not_finished,
-			$vb_not_validated,
-			$vb_no_gene_model,
-			$vb_total_loaded) = Initialize::load_gene_set(
-				$dbh,
-				$config,
-				$validation_file_core,
-				'vb',
-				$pruned_core_gff,
-				$core_fasta,
-				$dns,
-				$user,
-				$pass,
-			);
-	warn "VB Stats: loaded=$vb_pre_loaded, obsolete=$vb_obsolete, not_finished=$vb_not_finished, not_validated=$vb_not_validated, no_gene_model=$vb_no_gene_model, total_loaded=$vb_total_loaded\n";
+		print_stats($core_stats, $core_stats_file);
 	}
-	return $cap_total_loaded;
- 	
+	return $cap_stats->{genes};
+}
+
+sub print_stats {
+	my ($stats, $outfile) = @_;
+
+	open my $outfh, ">", $outfile;
+	for my $key (sort keys %$stats) {
+		print $outfh "$key\t$stats->{$key}\n";
+	}
 }
 
 sub prune_gff_by_scaffold {
