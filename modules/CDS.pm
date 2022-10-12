@@ -63,16 +63,16 @@ use DBI;
  Args:     Database handle object,parent mRNA ID. 
 =cut 
 
-sub get_all_cds_pos_by_parent_id{
-	my($dbh, $parent_id) = @_;
-	
-	my $sql = "select start,end from cds where cds_parent_id = \'$parent_id\';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
+sub get_all_cds_pos_by_parent_id {
+  my ($dbh, $parent_id) = @_;
+
+  my $sql       = "select start,end from cds where cds_parent_id = \'$parent_id\';";
+  my $array_ref = $dbh->selectall_arrayref($sql);
   return $array_ref;
 }
 
-
 ######## UNCLEAR??
+
 =head2 get_cds_pos_by_parent_id
 
  Title:    get_cds_pos_by_parent_id	
@@ -81,15 +81,16 @@ sub get_all_cds_pos_by_parent_id{
  Returns:  list (start,end). 	
  Args:     Database handle object,parent mRNA ID. 
 =cut 
-sub get_cds_pos_by_parent_id{
-	my($dbh,$parent_id) = @_;
-	
-	my $sql = "select start,end from cds where cds_parent_id = \'$parent_id\';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	my $start = $array_ref->[0]->[0];
-	my $end   = $array_ref->[0]->[1];
-	return($start,$end);	
-};
+
+sub get_cds_pos_by_parent_id {
+  my ($dbh, $parent_id) = @_;
+
+  my $sql       = "select start,end from cds where cds_parent_id = \'$parent_id\';";
+  my $array_ref = $dbh->selectall_arrayref($sql);
+  my $start     = $array_ref->[0]->[0];
+  my $end       = $array_ref->[0]->[1];
+  return ($start, $end);
+}
 
 =head2 get_cds_checksum_by_parent_id
 
@@ -100,13 +101,13 @@ sub get_cds_pos_by_parent_id{
  Args:     Database handle object,parent mRNA ID. 
 =cut 
 
-sub get_cds_checksum_by_parent_id{
-	my($dbh,$parent_id) = @_;
-	
-	my $sql = "select md5_checksum from cds where cds_parent_id = \'$parent_id\';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	
-	return $array_ref->[0]->[0];
+sub get_cds_checksum_by_parent_id {
+  my ($dbh, $parent_id) = @_;
+
+  my $sql       = "select md5_checksum from cds where cds_parent_id = \'$parent_id\';";
+  my $array_ref = $dbh->selectall_arrayref($sql);
+
+  return $array_ref->[0]->[0];
 }
 
 =head2 get_cds_error_code_by_parent_id
@@ -118,13 +119,13 @@ sub get_cds_checksum_by_parent_id{
  Args:     Database handle object,parent mRNA ID. 
 =cut 
 
-sub get_cds_error_code_by_parent_id{
-	my($dbh,$parent_id) = @_;
-	
-	my $sql = "select cds_error_code from cds where cds_parent_id = \'$parent_id\';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	
-	return $array_ref->[0]->[0];
+sub get_cds_error_code_by_parent_id {
+  my ($dbh, $parent_id) = @_;
+
+  my $sql       = "select cds_error_code from cds where cds_parent_id = \'$parent_id\';";
+  my $array_ref = $dbh->selectall_arrayref($sql);
+
+  return $array_ref->[0]->[0];
 }
 
 1;
