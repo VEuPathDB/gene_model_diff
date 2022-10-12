@@ -1,3 +1,4 @@
+
 =head1 LICENSE
 
 Copyright [2017-2020] EMBL-European Bioinformatics Institute
@@ -66,7 +67,6 @@ use GeneMapping;
 use AnnotationEvents;
 use Initialize;
 
-
 my $event_new_count;
 my $event_change_count;
 my $event_iso_gain_count;
@@ -89,350 +89,335 @@ my $dbh;
 
 #----------------Get options---------------------#
 my %options;
-my $result = GetOptions(\%options,
-		'config|f=s',
-		'speciesFile=s') or pod2usage(2);
+my $result = GetOptions(\%options, 'config|f=s', 'speciesFile=s') or pod2usage(2);
 
-if (not $options{config}) { print "Missing --config\n"; pod2usage(2); }
+if (not $options{config})      { print "Missing --config\n";      pod2usage(2); }
 if (not $options{speciesFile}) { print "Missing --speciesFile\n"; pod3usage(2); }
+
 #------------------------------------------------#
 
-my $config = readConfig($options{config});
-my $datadir= $config->val('Data','datadir');
-my $scriptdir = $FindBin::Bin;
+my $config       = readConfig($options{config});
+my $datadir      = $config->val('Data', 'datadir');
+my $scriptdir    = $FindBin::Bin;
 my $species_list = get_species($options{speciesFile});
-my $log_file = $config->val('Data','log_file');
+my $log_file     = $config->val('Data', 'log_file');
 
-if (not ($log_file)) {
+if (not($log_file)) {
   $log_file = "$FindBin::Bin/../config/gene_model_logFile.conf";
   print STDERR "Using default log config from $log_file\n";
 }
 Log::Log4perl->init($log_file);
 
-foreach my $species (@{$species_list}){
-	chomp($species);
-	run_species($species,1);
+foreach my $species (@{$species_list}) {
+  chomp($species);
+  run_species($species, 1);
 }
 
 sub run_species {
-	my($species,$run_count) = @_;
-	
-	$event_new_count =0;
-	$event_change_count=0;
+  my ($species, $run_count) = @_;
+
+  $event_new_count      = 0;
+  $event_change_count   = 0;
   $event_iso_gain_count = 0;
   $event_iso_lost_count = 0;
-	$event_merge_count=0;
-	$event_split_count=0;
-	$delete_total_count=0;
-	$load_total_count=0;
-	$gff_gene_count=0;
+  $event_merge_count    = 0;
+  $event_split_count    = 0;
+  $delete_total_count   = 0;
+  $load_total_count     = 0;
+  $gff_gene_count       = 0;
 
-	$identical_gene_count=0;
-	$new_gene_count=0;
-	$changed_gene_count=0;
-  $iso_lost_gene_count = 0;
-  $iso_gain_gene_count = 0;
-	@merged_gene_counts=0;
-	@split_gene_counts=0;
-	
-	warn "Running $species\n";
-	
-    create_database($config,$species);		
-	my $genes_loaded = load_data_base($config,$species);
-	
-	$dbh = get_dbh($config,$species);	
-	if($genes_loaded){
-		run_gene_set_comparison($dbh);
-		
-		
-		get_events($dbh);
-		write_events($config,$species);
-		write_delete_list($config,$species);
-		write_gff_to_load($config,$species);
-		write_summary_counts($config,$species);
-	}else{warn "No genes was loaded for $species\n"}	
+  $identical_gene_count = 0;
+  $new_gene_count       = 0;
+  $changed_gene_count   = 0;
+  $iso_lost_gene_count  = 0;
+  $iso_gain_gene_count  = 0;
+  @merged_gene_counts   = 0;
+  @split_gene_counts    = 0;
+
+  warn "Running $species\n";
+
+  create_database($config, $species);
+  my $genes_loaded = load_database($config, $species);
+
+  $dbh = get_dbh($config, $species);
+  if ($genes_loaded) {
+    run_gene_set_comparison($dbh);
+
+    get_events($dbh);
+    write_events($config, $species);
+    write_delete_list($config, $species);
+    write_gff_to_load($config, $species);
+    write_summary_counts($config, $species);
+  } else {
+    warn "No genes was loaded for $species\n";
+  }
 }
 
-sub load_data_base {
-	my($config,$species) = @_;
-	chomp($config,$species);
-	warn "Running load database for $species\n";
-	
-		
-	my $datadir= $config->val('Data','datadir');	
-	my $host = $config->val('Database','host');
-	my $port = $config->val('Database','port');
-	my $user = $config->val('Database','user');
-	my $pass = $config->val('Database','pass');
-	my $load_database = $config->val('Database','load_database');
-	
-	my $cap_gff    = "$datadir/$species/cap.gff";
-	my $core_gff   = "$datadir/$species/core.gff";
-	my $cap_fasta  = "$datadir/$species/cap.fasta";
-	my $core_fasta = "$datadir/$species/core.fasta";
-	my $cap_prot_fasta = "$datadir/$species/cap_protein.fasta";
-	
-	# Init new files
-	my $validation_file_cap = "$datadir/$species/gff_validation_error_cap.txt";
-	my $validation_file_core = "$datadir/$species/gff_validation_error_core.txt";
-	my $cap_stats_file = "$datadir/$species/stats_cap.txt";
-	my $core_stats_file = "$datadir/$species/stats_core.txt";
-	{ open my $valh, ">", $validation_file_cap; }
-	{ open my $valh, ">", $validation_file_core; }
-	
-	my $dns  = "dbi:mysql:$load_database:$host:$port";	
-	$dbh = get_dbh($config,$species);
-	
-	my $pruned_core_gff = prune_gff_by_scaffold($cap_gff,$core_gff);
-	
-	my $cap_stats = Initialize::load_gene_set($dbh,
-		$config,
-		$validation_file_cap,
-		'cap',
-		$cap_gff,
-		$cap_fasta,
-		$dns,
-		$user,
-		$pass,
-		$cap_prot_fasta,
-	);
-	print_stats($cap_stats, $cap_stats_file);
-	if($cap_stats->{genes}) {
-		my $core_stats = Initialize::load_gene_set(
-			$dbh,
-			$config,
-			$validation_file_core,
-			'vb',
-			$pruned_core_gff,
-			$core_fasta,
-			$dns,
-			$user,
-			$pass,
-		);
-		print_stats($core_stats, $core_stats_file);
-	}
-	return $cap_stats->{genes};
+sub load_database {
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  warn "Running load database for $species\n";
+
+  my $datadir       = $config->val('Data',     'datadir');
+  my $host          = $config->val('Database', 'host');
+  my $port          = $config->val('Database', 'port');
+  my $user          = $config->val('Database', 'user');
+  my $pass          = $config->val('Database', 'pass');
+  my $load_database = $config->val('Database', 'load_database');
+
+  my $cap_gff        = "$datadir/$species/cap.gff";
+  my $core_gff       = "$datadir/$species/core.gff";
+  my $cap_fasta      = "$datadir/$species/cap.fasta";
+  my $core_fasta     = "$datadir/$species/core.fasta";
+  my $cap_prot_fasta = "$datadir/$species/cap_protein.fasta";
+
+  # Init new files
+  my $validation_file_cap  = "$datadir/$species/gff_validation_error_cap.txt";
+  my $validation_file_core = "$datadir/$species/gff_validation_error_core.txt";
+  my $cap_stats_file       = "$datadir/$species/stats_cap.txt";
+  my $core_stats_file      = "$datadir/$species/stats_core.txt";
+  { open my $valh, ">", $validation_file_cap; }
+  { open my $valh, ">", $validation_file_core; }
+
+  my $dns = "dbi:mysql:$load_database:$host:$port";
+  $dbh = get_dbh($config, $species);
+
+  my $pruned_core_gff = prune_gff_by_scaffold($cap_gff, $core_gff);
+
+  my $cap_stats =
+    Initialize::load_gene_set($dbh, $config, $validation_file_cap, 'cap', $cap_gff, $cap_fasta,
+    $dns, $user, $pass, $cap_prot_fasta);
+  print_stats($cap_stats, $cap_stats_file);
+  if ($cap_stats->{genes}) {
+    my $core_stats =
+      Initialize::load_gene_set($dbh, $config, $validation_file_core, 'vb', $pruned_core_gff,
+      $core_fasta, $dns, $user, $pass);
+    print_stats($core_stats, $core_stats_file);
+  }
+  return $cap_stats->{genes};
 }
 
 sub print_stats {
-	my ($stats, $outfile) = @_;
+  my ($stats, $outfile) = @_;
 
-	open my $outfh, ">", $outfile;
-	for my $key (sort keys %$stats) {
-		print $outfh "$key\t$stats->{$key}\n";
-	}
+  open my $outfh, ">", $outfile;
+  for my $key (sort keys %$stats) {
+    print $outfh "$key\t$stats->{$key}\n";
+  }
 }
 
 sub prune_gff_by_scaffold {
-	my($cap_gff,$core_gff) = @_;
-	my %cap_scaffold;
-	
-	my $pruned_core_gff = $core_gff . '.pruned';
-	open my $cap_fh,'<',$cap_gff;
-	open my $core_fh,'<',$core_gff;
-	open my $pruned_core_gff_fh,'>',$pruned_core_gff;
-	
-	while (my $line = <$cap_fh>) {
-		chomp $line;
-		next if $line =~ /^#/;
-		my $scaffold = (split/\t/,$line)[0];
-		next if not $scaffold;
-		$cap_scaffold{$scaffold} = 1;
-	}
-  
-	my %known_cap_scaffold = %cap_scaffold;
-  my $n_total = scalar(keys %known_cap_scaffold);
-	
-	while (my $line = <$core_fh>) {		
-		next if $line =~ /^###/;
-		if ($line =~ /^#/) {
-			print $pruned_core_gff_fh $line;
-		} else {
-			my $scaffold = (split/\t/,$line)[0];
+  my ($cap_gff, $core_gff) = @_;
+  my %cap_scaffold;
+
+  my $pruned_core_gff = $core_gff . '.pruned';
+  open my $cap_fh,             '<', $cap_gff;
+  open my $core_fh,            '<', $core_gff;
+  open my $pruned_core_gff_fh, '>', $pruned_core_gff;
+
+  while (my $line = <$cap_fh>) {
+    chomp $line;
+    next if $line =~ /^#/;
+    my $scaffold = (split /\t/, $line)[0];
+    next if not $scaffold;
+    $cap_scaffold{$scaffold} = 1;
+  }
+
+  my %known_cap_scaffold = %cap_scaffold;
+  my $n_total            = scalar(keys %known_cap_scaffold);
+
+  while (my $line = <$core_fh>) {
+    next if $line =~ /^###/;
+    if ($line =~ /^#/) {
+      print $pruned_core_gff_fh $line;
+    } else {
+      my $scaffold = (split /\t/, $line)[0];
       next if not $scaffold;
-			if (exists $cap_scaffold{$scaffold}) {
-				print $pruned_core_gff_fh $line;
+      if (exists $cap_scaffold{$scaffold}) {
+        print $pruned_core_gff_fh $line;
         delete $known_cap_scaffold{$scaffold};
-			}
-		}
-	}
-  
+      }
+    }
+  }
+
   # Check that all scaffolds have been found
   if (%known_cap_scaffold) {
     my $n_left = scalar(keys %known_cap_scaffold);
     die("$n_left/$n_total scaffolds from the cap.gff have not been found in the core.gff");
   }
-  
-	return $pruned_core_gff;	
+
+  return $pruned_core_gff;
 }
 
 sub run_gene_set_comparison {
-	my($dbh) = @_;
+  my ($dbh) = @_;
 
-	ExonMapping::work_out_exon_mapping($dbh);
-	GeneClusters::work_out_gene_clusters($dbh);
-	GeneClusters::calculate_cluster_summary($dbh);
-	TranscriptLinks::work_out_transcript_links($dbh);	
-	TranscriptMapping::resolve_transcript_mappings($dbh);
-	GeneMapping::resolve_maptype_cluster($dbh);
+  ExonMapping::work_out_exon_mapping($dbh);
+  GeneClusters::work_out_gene_clusters($dbh);
+  GeneClusters::calculate_cluster_summary($dbh);
+  TranscriptLinks::work_out_transcript_links($dbh);
+  TranscriptMapping::resolve_transcript_mappings($dbh);
+  GeneMapping::resolve_maptype_cluster($dbh);
 
 }
 
 sub get_events {
-	my($dbh) = @_;
-	$identical_gene_count = AnnotationEvents::get_identical_gene($dbh);
- 	$new_gene_count =       AnnotationEvents::get_new_gene($dbh);
- 	$changed_gene_count =   AnnotationEvents::get_changed_genes($dbh);
- 	$iso_gain_gene_count =   AnnotationEvents::get_gain_iso_form($dbh);
- 	$iso_lost_gene_count =   AnnotationEvents::get_lost_iso_form($dbh);
- 	@merged_gene_counts =   AnnotationEvents::get_merge($dbh);
- 	@split_gene_counts =    AnnotationEvents::get_splits($dbh);
+  my ($dbh) = @_;
+  $identical_gene_count = AnnotationEvents::get_identical_gene($dbh);
+  $new_gene_count       = AnnotationEvents::get_new_gene($dbh);
+  $changed_gene_count   = AnnotationEvents::get_changed_genes($dbh);
+  $iso_gain_gene_count  = AnnotationEvents::get_gain_iso_form($dbh);
+  $iso_lost_gene_count  = AnnotationEvents::get_lost_iso_form($dbh);
+  @merged_gene_counts   = AnnotationEvents::get_merge($dbh);
+  @split_gene_counts    = AnnotationEvents::get_splits($dbh);
 }
 
 sub write_events {
-	my($config,$species) = @_;
-	chomp($config,$species);
-	my %duplicate_ids;
-	my $datadir= $config->val('Data','datadir');
-	my $gff_file_dir = "$datadir/$species";
-	open my $file_handle,'>',"$gff_file_dir/annotation_events.txt";
-	my $sql = 'select vb_gene_id,cap_gene_id,events from gene_events;';
-	
-	my $sth = $dbh->prepare($sql);
-	$sth->execute();
-	
-	my $events_ref = $sth->fetchall_arrayref;
-	if(scalar @{$events_ref} < 1){
-		#die "No events found\n;";
-	}
-	
-	foreach my $row (@{$events_ref}){
-		my($vb_gene_id,$cap_gene_id,$event) = @{$row};
-		if((defined($vb_gene_id) and exists $duplicate_ids{$vb_gene_id}) or (defined($cap_gene_id) and exists $duplicate_ids{$cap_gene_id})){
-			print 	$file_handle "Duplicate\t$vb_gene_id~$cap_gene_id\n//\n";
-		}elsif($event eq 'new_gene'){
-			$duplicate_ids{$cap_gene_id} =1;
-		}else{
-			$duplicate_ids{$vb_gene_id} =1;
-			$duplicate_ids{$cap_gene_id} =1
-		}
-		
-		if($event eq 'identical'){
-			print $file_handle "Ge\t$vb_gene_id~$cap_gene_id\n//\n";
-		}
-		
-		
-		if($event eq 'change_gene'){
-			print $file_handle "Ge\t$vb_gene_id=$cap_gene_id\n//\n";
-			$event_change_count++;
-    }elsif($event eq 'gain_iso_form'){
-			print $file_handle "Ge\t$vb_gene_id=+$cap_gene_id\n//\n";
-			$event_iso_gain_count++;
-    }elsif($event eq 'lost_iso_form'){
-			print $file_handle "Ge\t$vb_gene_id=-$cap_gene_id\n//\n";
-			$event_iso_lost_count++;
-		}elsif($event eq 'new_gene'){
-			print $file_handle "Ge\t+$cap_gene_id\n//\n";
-			$event_new_count++;
-		}elsif($event eq "merge_gene"){
-			print $file_handle "Ge\t$vb_gene_id>$cap_gene_id\n//\n";
-			$event_merge_count++;
-		}elsif($event eq "split_gene"){
-			print $file_handle "Ge\t$vb_gene_id<$cap_gene_id\n//\n";
-			$event_split_count++;
-		}
-		
-				
-	}
-	
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  my %duplicate_ids;
+  my $datadir      = $config->val('Data', 'datadir');
+  my $gff_file_dir = "$datadir/$species";
+  open my $file_handle, '>', "$gff_file_dir/annotation_events.txt";
+  my $sql = 'select vb_gene_id,cap_gene_id,events from gene_events;';
+
+  my $sth = $dbh->prepare($sql);
+  $sth->execute();
+
+  my $events_ref = $sth->fetchall_arrayref;
+  if (scalar @{$events_ref} < 1) {
+
+    #die "No events found\n;";
+  }
+
+  foreach my $row (@{$events_ref}) {
+    my ($vb_gene_id, $cap_gene_id, $event) = @{$row};
+    if ( (defined($vb_gene_id) and exists $duplicate_ids{$vb_gene_id})
+      or (defined($cap_gene_id) and exists $duplicate_ids{$cap_gene_id}))
+    {
+      print $file_handle "Duplicate\t$vb_gene_id~$cap_gene_id\n//\n";
+    } elsif ($event eq 'new_gene') {
+      $duplicate_ids{$cap_gene_id} = 1;
+    } else {
+      $duplicate_ids{$vb_gene_id}  = 1;
+      $duplicate_ids{$cap_gene_id} = 1;
+    }
+
+    if ($event eq 'identical') {
+      print $file_handle "Ge\t$vb_gene_id~$cap_gene_id\n//\n";
+    }
+
+    if ($event eq 'change_gene') {
+      print $file_handle "Ge\t$vb_gene_id=$cap_gene_id\n//\n";
+      $event_change_count++;
+    } elsif ($event eq 'gain_iso_form') {
+      print $file_handle "Ge\t$vb_gene_id=+$cap_gene_id\n//\n";
+      $event_iso_gain_count++;
+    } elsif ($event eq 'lost_iso_form') {
+      print $file_handle "Ge\t$vb_gene_id=-$cap_gene_id\n//\n";
+      $event_iso_lost_count++;
+    } elsif ($event eq 'new_gene') {
+      print $file_handle "Ge\t+$cap_gene_id\n//\n";
+      $event_new_count++;
+    } elsif ($event eq "merge_gene") {
+      print $file_handle "Ge\t$vb_gene_id>$cap_gene_id\n//\n";
+      $event_merge_count++;
+    } elsif ($event eq "split_gene") {
+      print $file_handle "Ge\t$vb_gene_id<$cap_gene_id\n//\n";
+      $event_split_count++;
+    }
+
+  }
+
 }
 
 sub write_delete_list {
-	my($config,$species) = @_;
-	chomp($config,$species);
-	my $datadir= $config->val('Data','datadir');
-	
-	my $sql = "select distinct(vb_gene_id) from gene_mappings where map_type <> 'new' and map_type <> 'identical';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	
-	my $gff_file_dir = "$datadir/$species";
-	open my $file_handle,'>',"$gff_file_dir/old_genes_delete_from_core.txt";
-	
-	foreach my $id (@{$array_ref}){				
-		print $file_handle "$id->[0]\n";
-		$delete_total_count++;	
-	}
-	
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  my $datadir = $config->val('Data', 'datadir');
+
+  my $sql =
+"select distinct(vb_gene_id) from gene_mappings where map_type <> 'new' and map_type <> 'identical';";
+  my $array_ref = $dbh->selectall_arrayref($sql);
+
+  my $gff_file_dir = "$datadir/$species";
+  open my $file_handle, '>', "$gff_file_dir/old_genes_delete_from_core.txt";
+
+  foreach my $id (@{$array_ref}) {
+    print $file_handle "$id->[0]\n";
+    $delete_total_count++;
+  }
+
 }
 
 sub write_gff_to_load {
-	my($config,$species) = @_;
-	chomp($config,$species);
-	my %loaded_hash;
-	my %parents_hash;
-	my $datadir= $config->val('Data','datadir');
-	my $gff_file_dir= "$datadir/$species";
-	
-	my $sql = "select distinct(cap_gene_id) from gene_mappings where map_type <> 'identical';";
-	my $array_ref = $dbh->selectall_arrayref($sql);
-	
-	open my $file_handle,'>',"$gff_file_dir/loaded_genes_delete_from_WA.txt";
-	
-	for my $id (@{$array_ref}){
-		print $file_handle "$id->[0]\n";
-		$loaded_hash{$id->[0]}=1;
-		$load_total_count++;
-	}
-	
-	my $cap_gff= "$gff_file_dir/cap.gff";
-	open my $cap_gff_fh,'<', $cap_gff or die "can't open $cap_gff\n";
-	open my $load_gff_fh,'>',"$gff_file_dir/genes_2_load.gff" or die "can't open gene_2_load.gff\n";
-	print $load_gff_fh "##gff-version 3\n";
-	
-	while( my $line = <$cap_gff_fh>){
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  my %loaded_hash;
+  my %parents_hash;
+  my $datadir      = $config->val('Data', 'datadir');
+  my $gff_file_dir = "$datadir/$species";
+
+  my $sql       = "select distinct(cap_gene_id) from gene_mappings where map_type <> 'identical';";
+  my $array_ref = $dbh->selectall_arrayref($sql);
+
+  open my $file_handle, '>', "$gff_file_dir/loaded_genes_delete_from_WA.txt";
+
+  for my $id (@{$array_ref}) {
+    print $file_handle "$id->[0]\n";
+    $loaded_hash{$id->[0]} = 1;
+    $load_total_count++;
+  }
+
+  my $cap_gff = "$gff_file_dir/cap.gff";
+  open my $cap_gff_fh,  '<', $cap_gff                         or die "can't open $cap_gff\n";
+  open my $load_gff_fh, '>', "$gff_file_dir/genes_2_load.gff" or die "can't open gene_2_load.gff\n";
+  print $load_gff_fh "##gff-version 3\n";
+
+  while (my $line = <$cap_gff_fh>) {
     next if $line =~ /^#/;
-		chomp $line;
-		
-		my @columns = split/\t/, $line;
+    chomp $line;
+
+    my @columns = split /\t/, $line;
     next if @columns == 0;
     if (scalar(@columns) != 9) {
       warn("Not 9 columns in the gff: $line\n");
     }
     my $biotype = $columns[2];
-		next unless $biotype;
-    
+    next unless $biotype;
+
     my %attrib = parse_attribs($columns[8]);
-    my $ID = $attrib{ID};
-		my $parent = $attrib{Parent};
-    
+    my $ID     = $attrib{ID};
+    my $parent = $attrib{Parent};
+
     $columns[1] = 'VectorBase';
     my $vb_gff_line = join("\t", @columns) . "\n";
-    
-		if ($biotype eq 'gene') {
-			if (exists $loaded_hash{$ID}) {
-				print $load_gff_fh $vb_gff_line;
-				$gff_gene_count++;
-			}
-		} elsif ($biotype eq 'mRNA') {			
-			if (exists $loaded_hash{$parent}) {
-				$parents_hash{$ID} = 1;
-				print $load_gff_fh $vb_gff_line;
-			}
-		}elsif ($biotype eq 'exon' or $biotype eq 'CDS'){
-			if (exists $parents_hash{$parent}) {
-				print $load_gff_fh $vb_gff_line;
-			}
-		}	
-	}
+
+    if ($biotype eq 'gene') {
+      if (exists $loaded_hash{$ID}) {
+        print $load_gff_fh $vb_gff_line;
+        $gff_gene_count++;
+      }
+    } elsif ($biotype eq 'mRNA') {
+      if (exists $loaded_hash{$parent}) {
+        $parents_hash{$ID} = 1;
+        print $load_gff_fh $vb_gff_line;
+      }
+    } elsif ($biotype eq 'exon' or $biotype eq 'CDS') {
+      if (exists $parents_hash{$parent}) {
+        print $load_gff_fh $vb_gff_line;
+      }
+    }
+  }
 }
 
 sub parse_attribs {
   my ($string) = @_;
-  
+
   my %attrib;
   for my $field (split(";", $string)) {
     my ($key, $value) = split("=", $field);
-    
+
     if (defined $key and defined $value) {
       $attrib{$key} = $value;
     } else {
@@ -443,88 +428,89 @@ sub parse_attribs {
 }
 
 sub write_summary_counts {
-	my($config,$species) = @_;
-    chomp($config,$species);
-	my $datadir= $config->val('Data','datadir');
-	my $gff_file_dir= "$datadir/$species";
-	
-   open  my $file_fh,'>',"$gff_file_dir/summary_counts.txt";	
-   print $file_fh  "Identical genes $identical_gene_count\n";
-   print $file_fh  "New gene events:\t$event_new_count ($new_gene_count)\n";
-   print $file_fh  "Changed gene events:\t$event_change_count ($changed_gene_count)\n";
-   print $file_fh  "Iso gain events:\t$event_iso_gain_count ($iso_gain_gene_count)\n";
-   print $file_fh  "Iso lost events:\t$event_iso_lost_count ($iso_lost_gene_count)\n";
-   print $file_fh  "Merge gene events:\t$event_merge_count ($merged_gene_counts[0],$merged_gene_counts[1],$merged_gene_counts[2])\n";
-   print $file_fh  "Split gene events:\t$event_split_count ($split_gene_counts[0],$split_gene_counts[1],$split_gene_counts[2])\n";
-   print $file_fh  "Total genes deleted:\t$delete_total_count\n";
-   print $file_fh  "Total genes loaded:\t$load_total_count\n";
-   print $file_fh  "GFF gene count:\t$gff_gene_count\n";		
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  my $datadir      = $config->val('Data', 'datadir');
+  my $gff_file_dir = "$datadir/$species";
+
+  open my $file_fh, '>', "$gff_file_dir/summary_counts.txt";
+  print $file_fh "Identical genes $identical_gene_count\n";
+  print $file_fh "New gene events:\t$event_new_count ($new_gene_count)\n";
+  print $file_fh "Changed gene events:\t$event_change_count ($changed_gene_count)\n";
+  print $file_fh "Iso gain events:\t$event_iso_gain_count ($iso_gain_gene_count)\n";
+  print $file_fh "Iso lost events:\t$event_iso_lost_count ($iso_lost_gene_count)\n";
+  print $file_fh
+"Merge gene events:\t$event_merge_count ($merged_gene_counts[0],$merged_gene_counts[1],$merged_gene_counts[2])\n";
+  print $file_fh
+"Split gene events:\t$event_split_count ($split_gene_counts[0],$split_gene_counts[1],$split_gene_counts[2])\n";
+  print $file_fh "Total genes deleted:\t$delete_total_count\n";
+  print $file_fh "Total genes loaded:\t$load_total_count\n";
+  print $file_fh "GFF gene count:\t$gff_gene_count\n";
 }
 
 sub get_species {
-	my($speciesFile) = @_;
-	
-	unless($speciesFile){ croak("No species file supplied");}
-	unless(-e $speciesFile){ croak("species file $speciesFile do not exists");}
-	
-	open my $file_h,'<',$speciesFile;
-	
-	my @species = <$file_h>;
-	
-	return \@species;
+  my ($speciesFile) = @_;
+
+  unless ($speciesFile)    { croak("No species file supplied"); }
+  unless (-e $speciesFile) { croak("species file $speciesFile do not exists"); }
+
+  open my $file_h, '<', $speciesFile;
+
+  my @species = <$file_h>;
+
+  return \@species;
 }
 
-sub readConfig{
-    my ($configFile) = @_;
-    unless($configFile){ croak("No config file supplied");}
-    unless(-e $configFile){ croak("config file $configFile do not exists");}
-    
-    $config = Config::IniFiles->new(-file => $configFile);
+sub readConfig {
+  my ($configFile) = @_;
+  unless ($configFile)    { croak("No config file supplied"); }
+  unless (-e $configFile) { croak("config file $configFile do not exists"); }
 
-    return $config;
+  $config = Config::IniFiles->new(-file => $configFile);
+
+  return $config;
 }
 
 sub create_database {
-	my($config,$species) = @_;
-	chomp($config,$species); 
-	my $host = $config->val('Database','host');
-	my $port = $config->val('Database','port');
-	my $user = $config->val('Database','user');
-	my $pass = $config->val('Database','pass');
-	my $prefix= $config->val('Database','prefix');
-	my $database_name = $config->val('Database','database');
-		
-	my $database = $prefix .'_' . $species . '_'  . $database_name;
-	
-	my $dns  = "dbi:mysql:;host=$host;port=$port";
-	my $dbh=DBI->connect( $dns,$user, $pass,{RaiseError => 1}) or die "cant connect as $user";
-	
-	$dbh->do("drop database if exists $database;");
-	$dbh->do("create database $database;");
-	
-	`mysql --host=$host --port=$port --user=$user  --password=$pass $database  < $scriptdir/create_classification_database.sql`;
-	croak("Failed to load table definitions in create_classification_database.sql to database $database on host $host") if $?;
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  my $host          = $config->val('Database', 'host');
+  my $port          = $config->val('Database', 'port');
+  my $user          = $config->val('Database', 'user');
+  my $pass          = $config->val('Database', 'pass');
+  my $prefix        = $config->val('Database', 'prefix');
+  my $database_name = $config->val('Database', 'database');
+
+  my $database = $prefix . '_' . $species . '_' . $database_name;
+
+  my $dns = "dbi:mysql:;host=$host;port=$port";
+  my $dbh = DBI->connect($dns, $user, $pass, {RaiseError => 1}) or die "cant connect as $user";
+
+  $dbh->do("drop database if exists $database;");
+  $dbh->do("create database $database;");
+
+`mysql --host=$host --port=$port --user=$user  --password=$pass $database  < $scriptdir/create_classification_database.sql`;
+  croak(
+"Failed to load table definitions in create_classification_database.sql to database $database on host $host"
+  ) if $?;
 }
 
 sub get_dbh {
-	my($config,$species) = @_;
-	chomp($config,$species); 
-	my $host = $config->val('Database','host');
-	my $port = $config->val('Database','port');
-	my $user = $config->val('Database','user');
-	my $pass = $config->val('Database','pass');
-	my $prefix= $config->val('Database','prefix');
-	my $database_name = $config->val('Database','database');
-		
-	my $database = $prefix .'_' . $species . '_'  . $database_name;
-	
-	my $dns  = "dbi:mysql:$database:$host:$port";
-	my $dbh=DBI->connect( $dns,$user, $pass,{RaiseError => 1})
-		or die "cant connect to $database as $user";
-	
-	return $dbh;
+  my ($config, $species) = @_;
+  chomp($config, $species);
+  my $host          = $config->val('Database', 'host');
+  my $port          = $config->val('Database', 'port');
+  my $user          = $config->val('Database', 'user');
+  my $pass          = $config->val('Database', 'pass');
+  my $prefix        = $config->val('Database', 'prefix');
+  my $database_name = $config->val('Database', 'database');
+
+  my $database = $prefix . '_' . $species . '_' . $database_name;
+
+  my $dns = "dbi:mysql:$database:$host:$port";
+  my $dbh = DBI->connect($dns, $user, $pass, {RaiseError => 1})
+    or die "cant connect to $database as $user";
+
+  return $dbh;
 }
-
-
-
 

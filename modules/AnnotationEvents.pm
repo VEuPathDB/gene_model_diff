@@ -60,22 +60,20 @@ use warnings;
 =cut
 
 sub get_identical_gene {
-	my($dbh) = @_;
-	
-	my $gene_count=0,
-	my $identical_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	
-	my $identical_gene_aref = GeneMapping::get_gene_mappings_by_maptype($dbh,'identical'); 
-	
-	foreach my $row (@{$identical_gene_aref}){
-			my $vb_gene_id  = $row->[1];
-		    my $cap_gene_id = $row->[0];
-			$identical_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'identical');
-			$gene_count++;
-	}		
-	
-	return $gene_count;
+  my ($dbh) = @_;
+
+  my $gene_count = 0, my $identical_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my $identical_gene_aref = GeneMapping::get_gene_mappings_by_maptype($dbh, 'identical');
+
+  foreach my $row (@{$identical_gene_aref}) {
+    my $vb_gene_id  = $row->[1];
+    my $cap_gene_id = $row->[0];
+    $identical_gene_insert_sth->execute($vb_gene_id, $cap_gene_id, 'identical');
+    $gene_count++;
+  }
+
+  return $gene_count;
 }
 
 =head2 
@@ -87,21 +85,20 @@ sub get_identical_gene {
  Args: Database handle object     
 =cut
 
-sub get_new_gene{
-	my($dbh) = @_;
-	
-	my $gene_count=0;
-	my $new_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	
-	my $new_gene_aref = GeneMapping::get_gene_mappings_by_maptype($dbh,'new');
-	
-	foreach my $row (@{$new_gene_aref}){
-			my $cap_gene_id = $row->[0];
-			$new_gene_insert_sth->execute(undef,$cap_gene_id,'new_gene');
-			$gene_count++;
-	}
-	return $gene_count;
+sub get_new_gene {
+  my ($dbh) = @_;
+
+  my $gene_count          = 0;
+  my $new_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my $new_gene_aref = GeneMapping::get_gene_mappings_by_maptype($dbh, 'new');
+
+  foreach my $row (@{$new_gene_aref}) {
+    my $cap_gene_id = $row->[0];
+    $new_gene_insert_sth->execute(undef, $cap_gene_id, 'new_gene');
+    $gene_count++;
+  }
+  return $gene_count;
 }
 
 =head2 
@@ -114,26 +111,26 @@ sub get_new_gene{
 =cut
 
 sub get_changed_genes {
-	my($dbh) = @_;
-	
-	my $gene_count=0;
-	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	my @maptypes = qw(exon_boundary exon_number CDS_change);
-	my @changed_genes;
-	
-	foreach my $maptype (@maptypes){
-		push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh,$maptype);};	
-	}
-	
-	foreach my $row (@changed_genes){
-			my $vb_gene_id  = $row->[1];
-		    my $cap_gene_id = $row->[0];
-			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'change_gene');
-			$gene_count++;
-	}
-	
-	return $gene_count;
+  my ($dbh) = @_;
+
+  my $gene_count              = 0;
+  my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my @maptypes = qw(exon_boundary exon_number CDS_change);
+  my @changed_genes;
+
+  foreach my $maptype (@maptypes) {
+    push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh, $maptype);};
+  }
+
+  foreach my $row (@changed_genes) {
+    my $vb_gene_id  = $row->[1];
+    my $cap_gene_id = $row->[0];
+    $changed_gene_insert_sth->execute($vb_gene_id, $cap_gene_id, 'change_gene');
+    $gene_count++;
+  }
+
+  return $gene_count;
 }
 
 =head2
@@ -145,26 +142,26 @@ sub get_changed_genes {
 =cut
 
 sub get_lost_iso_form {
-	my($dbh) = @_;
-	
-	my $gene_count=0;
-	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	my @maptypes = qw(lost_iso_form);
-	my @changed_genes;
-	
-	foreach my $maptype (@maptypes){
-		push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh,$maptype);};	
-	}
-	
-	foreach my $row (@changed_genes){
-			my $vb_gene_id  = $row->[1];
-		    my $cap_gene_id = $row->[0];
-			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'lost_iso_form');
-			$gene_count++;
-	}
-	
-	return $gene_count;
+  my ($dbh) = @_;
+
+  my $gene_count              = 0;
+  my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my @maptypes = qw(lost_iso_form);
+  my @changed_genes;
+
+  foreach my $maptype (@maptypes) {
+    push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh, $maptype);};
+  }
+
+  foreach my $row (@changed_genes) {
+    my $vb_gene_id  = $row->[1];
+    my $cap_gene_id = $row->[0];
+    $changed_gene_insert_sth->execute($vb_gene_id, $cap_gene_id, 'lost_iso_form');
+    $gene_count++;
+  }
+
+  return $gene_count;
 }
 
 =head2
@@ -176,26 +173,26 @@ sub get_lost_iso_form {
 =cut
 
 sub get_gain_iso_form {
-	my($dbh) = @_;
-	
-	my $gene_count=0;
-	my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	my @maptypes = qw(gain_iso_form);
-	my @changed_genes;
-	
-	foreach my $maptype (@maptypes){
-		push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh,$maptype);};	
-	}
-	
-	foreach my $row (@changed_genes){
-			my $vb_gene_id  = $row->[1];
-		    my $cap_gene_id = $row->[0];
-			$changed_gene_insert_sth->execute($vb_gene_id,$cap_gene_id,'gain_iso_form');
-			$gene_count++;
-	}
-	
-	return $gene_count;
+  my ($dbh) = @_;
+
+  my $gene_count              = 0;
+  my $changed_gene_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my @maptypes = qw(gain_iso_form);
+  my @changed_genes;
+
+  foreach my $maptype (@maptypes) {
+    push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh, $maptype);};
+  }
+
+  foreach my $row (@changed_genes) {
+    my $vb_gene_id  = $row->[1];
+    my $cap_gene_id = $row->[0];
+    $changed_gene_insert_sth->execute($vb_gene_id, $cap_gene_id, 'gain_iso_form');
+    $gene_count++;
+  }
+
+  return $gene_count;
 }
 
 =head2 
@@ -207,32 +204,34 @@ sub get_gain_iso_form {
  Args: Database handle object    
 =cut
 
-sub get_splits{
-	my($dbh) = @_;
-	
-	my($total_splits,$vb_genes,$cap_genes);
-	$total_splits=$vb_genes=$cap_genes=0;
-	my $events_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	
-	my $splits_array_ref = GeneMapping::get_gene_mappings_by_group($dbh,'vb_gene_id','cap_gene_id','split');
-	
-	foreach my $row (@{$splits_array_ref}){
-			my $vb_gene_id = $row->[0];
-			$total_splits++;
-			$vb_genes--;
-			my $cap_id_string;
-			my $cap_gene_array = GeneMapping::get_gene_mappings_by_id_and_maptype($dbh,'vb_gene_id',$vb_gene_id,'cap_gene_id','split');
-			foreach my $row (@{$cap_gene_array}){
-					my $cap_gene_id = $row->[0];
-					$cap_id_string .= $cap_gene_id . ':';
-					$cap_genes++;
-			}
-			$cap_id_string=~s/\:$//;
-			$events_insert_sth->execute($vb_gene_id,$cap_id_string,'split_gene');
-	}
-	
-	return ($total_splits,$vb_genes,$cap_genes);
+sub get_splits {
+  my ($dbh) = @_;
+
+  my ($total_splits, $vb_genes, $cap_genes);
+  $total_splits = $vb_genes = $cap_genes = 0;
+  my $events_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my $splits_array_ref =
+    GeneMapping::get_gene_mappings_by_group($dbh, 'vb_gene_id', 'cap_gene_id', 'split');
+
+  foreach my $row (@{$splits_array_ref}) {
+    my $vb_gene_id = $row->[0];
+    $total_splits++;
+    $vb_genes--;
+    my $cap_id_string;
+    my $cap_gene_array =
+      GeneMapping::get_gene_mappings_by_id_and_maptype($dbh, 'vb_gene_id', $vb_gene_id,
+      'cap_gene_id', 'split');
+    foreach my $row (@{$cap_gene_array}) {
+      my $cap_gene_id = $row->[0];
+      $cap_id_string .= $cap_gene_id . ':';
+      $cap_genes++;
+    }
+    $cap_id_string =~ s/\:$//;
+    $events_insert_sth->execute($vb_gene_id, $cap_id_string, 'split_gene');
+  }
+
+  return ($total_splits, $vb_genes, $cap_genes);
 }
 
 =head2 
@@ -244,40 +243,43 @@ sub get_splits{
  Args: Database handle object     
 =cut
 
-sub get_merge{
-	my($dbh) = @_;
-	
-	my ($total_merge,$vb_genes,$cap_genes);
-	$total_merge=$vb_genes=$cap_genes=0;
-	my $events_insert_sth = $dbh->prepare(get_sql('gene_events'));
-	
-	my $cap_merge_aref = GeneMapping::get_gene_mappings_by_group($dbh,'cap_gene_id','vb_gene_id','merge');
-	
-	foreach my $row (@{$cap_merge_aref}){
-		my $cap_gene_id = $row->[0];
-		
-		$total_merge++;
-		$cap_genes++;
-		
-		my $vb_id_string;
-		my $vb_merge_aref = GeneMapping::get_gene_mappings_by_id_and_maptype($dbh,'cap_gene_id',$cap_gene_id,'vb_gene_id','merge');
-		foreach my $row (@{$vb_merge_aref}){
-			my $vb_gene_id = $row->[0];
-			$vb_id_string .= $vb_gene_id . ':';
-			$vb_genes--;
-		}
-		$vb_id_string=~s/\:$//;
-		$events_insert_sth->execute($vb_id_string,$cap_gene_id,'merge_gene');
-	}
-	
-	return ($total_merge,$vb_genes,$cap_genes);	
+sub get_merge {
+  my ($dbh) = @_;
+
+  my ($total_merge, $vb_genes, $cap_genes);
+  $total_merge = $vb_genes = $cap_genes = 0;
+  my $events_insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my $cap_merge_aref =
+    GeneMapping::get_gene_mappings_by_group($dbh, 'cap_gene_id', 'vb_gene_id', 'merge');
+
+  foreach my $row (@{$cap_merge_aref}) {
+    my $cap_gene_id = $row->[0];
+
+    $total_merge++;
+    $cap_genes++;
+
+    my $vb_id_string;
+    my $vb_merge_aref =
+      GeneMapping::get_gene_mappings_by_id_and_maptype($dbh, 'cap_gene_id', $cap_gene_id,
+      'vb_gene_id', 'merge');
+    foreach my $row (@{$vb_merge_aref}) {
+      my $vb_gene_id = $row->[0];
+      $vb_id_string .= $vb_gene_id . ':';
+      $vb_genes--;
+    }
+    $vb_id_string =~ s/\:$//;
+    $events_insert_sth->execute($vb_id_string, $cap_gene_id, 'merge_gene');
+  }
+
+  return ($total_merge, $vb_genes, $cap_genes);
 }
 
-sub get_sql{
-	my ($sql_name) = @_;
-	if($sql_name eq 'gene_events'){
-		    my $gene_events = "insert gene_events(vb_gene_id,cap_gene_id,events) select ?,?,?";
-		    return $gene_events;
-	}
+sub get_sql {
+  my ($sql_name) = @_;
+  if ($sql_name eq 'gene_events') {
+    my $gene_events = "insert gene_events(vb_gene_id,cap_gene_id,events) select ?,?,?";
+    return $gene_events;
+  }
 }
 1;
