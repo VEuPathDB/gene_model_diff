@@ -75,69 +75,74 @@ my $loader;
  Title: load_gene_set
  Usage: Initialize::load_gene_set($dbh,$config,$validation_file,$source,$gff_file,$fasta_file,$dsn,$user,$pass)
  Function: load the gff into a SeqFeature Store database, then loads validated genes into the gene_model table.
- Returns: Counts of genes: before load, Obsolete, Unfinished, faild validation, total loaded.
+ Returns: Hashref of stats for the number of genes, obsolete, etc.
  Args: Database handle object, config object,source of GFF, GFF file,FASTA file,database connection details (dns),user,pass
 =cut
 
 sub load_gene_set {
 	my($dbh, $config, $validation_file, $source, $gff_file, $fasta_file, $dsn, $user, $pass, $prot_fasta) = @_;
-	my $obsolete = 0;
-	my $not_finished = 0;
-	my $not_validated = 0;
-	my $total_loaded = 0;
-	my $no_gene_model = 0;
+	my %stats = (
+		obsolete => 0,
+		not_finished => 0,
+		not_validated => 0,
+		total_loaded => 0,
+		no_gene_model => 0,
+		ok_gene_model => 0,
+		preloaded_features => 0,
+		genes => 0,
+	);
 	my $infoLog = Log::Log4perl->get_logger("infologger");
 
 	my $proteins = _load_proteins($prot_fasta);
 
-	my $pre_loaded = _gff_load($gff_file,$fasta_file,$dsn,$user,$pass);
+	$stats{preloaded_features} = _gff_load($gff_file, $fasta_file, $dsn, $user, $pass);
 	
 	my @genes = $db->get_features_by_type('gene');
 	my @prot_genes = $db->get_features_by_type('protein_coding_gene');
   
-  print(scalar(@genes) . " biotype 'gene'\n");
-  print(scalar(@prot_genes) . " biotype 'protein_coding_gene'\n");
-  @genes = (@genes, @prot_genes);
-    open my $validation_fh,'>>',$validation_file;
+	$stats{genes} = scalar(@genes);
+	@genes = (@genes, @prot_genes);
+	open my $validation_fh,'>>',$validation_file;
 	foreach my $gene (@genes){
 		
 		my %attb = $gene->attributes;
 		my $gene_id = $attb{load_id}->[0];
 	
-    # Exclude some gene models
+		# Exclude some gene models
 		if ($source eq 'cap'){
 			if ( _gene_is_obsolete(\%attb) ) {
-				$obsolete++;
+				$stats{obsolete}++;
 				next;
 			}
 			if (not _gene_is_finished(\%attb) ) {
-				$not_finished++;
+				$stats{not_finished}++;
 				next;
 			}
 		}
 		my $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
 		
 		if($source eq 'cap' and $passed_validation < 0){
-			$not_validated++;
-			$infoLog->info("Gene $attb{load_id}->[0] did not paas validation");
+			$stats{not_validated}++;
+			$infoLog->info("Gene $gene_id did not pass validation");
 		}
 				
 		my ($gene_model,$CDS_present) = _build_gene_model($gene);
 	    
 		if($gene_model and %{$gene_model}){
+			$stats{ok_gene_model}++;
 			_insert_gene_model($gene_model,$dbh,$source);
 			_insert_exon($gene_model,$dbh,$source);
 			if($CDS_present){
 				_insert_CDS($gene_model,$dbh,$source);
 			}
 		} else {
-      $no_gene_model++;
-    }
+			$stats{no_gene_model}++;
+		}
 		
-		$total_loaded++;
+		$stats{total_loaded}++;
 	}
 	
-	return($pre_loaded, $obsolete, $not_finished, $not_validated, $no_gene_model, $total_loaded);
+	return \%stats;
 }
 
 sub _load_proteins {
@@ -177,10 +182,10 @@ sub _gff_load {
 	if($dsn){
 		$db = Bio::DB::SeqFeature::Store->new(
 			-adaptor	=> 'DBI::mysql',
-             -dsn	=> $dsn,
-             -user   => $user,
-             -pass   => $pass,
-             -create	=> 1 
+			-dsn	=> $dsn,
+			-user   => $user,
+			-pass   => $pass,
+			-create	=> 1 
 		);
 	}else{
 		$db = Bio::DB::SeqFeature::Store->new(
