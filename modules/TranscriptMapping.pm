@@ -51,6 +51,13 @@ use Log::Log4perl;
 use TranscriptLinks;
 use Data::Dumper;
 
+my $select_transcripts_by_cluster_sql = "
+  SELECT id, cap_transcript_id, vb_transcript_id, group_count, link_group, link_rank
+FROM transcript_links
+WHERE gene_cluster_id = ?
+AND link_status = 'not_mapped'
+;";
+
 =head2 resolve_transcript_mappings
 
  Title: resolve_transcript_mappings
@@ -62,16 +69,14 @@ use Data::Dumper;
 
 sub resolve_transcript_mappings {
   my ($dbh) = @_;
-  my $select_transcript_by_rank_sql =
-"select id,cap_transcript_id,vb_transcript_id,group_count from transcript_links where gene_cluster_id = ? and link_status = 'not_mapped' group by cap_transcript_id,vb_transcript_id having max(link_rank) = ?;";
-  my $select_transcript_by_rank_sth = $dbh->prepare($select_transcript_by_rank_sql);
   my @error_limits                  = (0, 9);
   my $gene_cluster_ids              = GeneClusters::get_distinct_cluster_ids($dbh, \@error_limits);
   for my $cluster_id (@{$gene_cluster_ids}) {
-    _loop_over_rank($dbh, $cluster_id, $select_transcript_by_rank_sth);
+    _loop_over_rank($dbh, $cluster_id);
   }
   _copy_from_link_to_mapping_table($dbh);
 }
+
 
 =head2 get_all_transcript_mappings
 
@@ -110,19 +115,44 @@ sub get_all_transcript_mappings_by_id {
 }
 
 sub _loop_over_rank {
-  my ($dbh, $cluster_id, $select_transcript_by_rank_sth) = @_;
+  my ($dbh, $cluster_id) = @_;
   for (my $rank = 1 ; $rank <= 5 ; $rank++) {
-    $select_transcript_by_rank_sth->execute($cluster_id, $rank);
-    my $array_ref = $select_transcript_by_rank_sth->fetchall_arrayref;
-    next unless (scalar @{$array_ref} > 0);
+    my $transcripts = _select_transcripts_by_rank($dbh, $cluster_id, $rank);
+    next unless (scalar @{$transcripts} > 0);
     my @transcript_pairs_to_keep;
-    _get_transcript_pair_with_min_count($array_ref, \@transcript_pairs_to_keep);
+    _get_transcript_pair_with_min_count($transcripts, \@transcript_pairs_to_keep);
     _update_transcript_link_table($dbh, \@transcript_pairs_to_keep);
   }
 
   if (_find_unmapped_transcript($dbh, $cluster_id)) {
-    _loop_over_rank($dbh, $cluster_id, $select_transcript_by_rank_sth);
+    _loop_over_rank($dbh, $cluster_id);
   }
+}
+
+sub _select_transcripts_by_rank  {
+  my ($dbh, $cluster_id, $rank) = @_;
+
+  my $select_transcripts_by_cluster_sth = $dbh->prepare($select_transcripts_by_cluster_sql);
+  $select_transcripts_by_cluster_sth->execute($cluster_id);
+  my $links = $select_transcripts_by_cluster_sth->fetchall_arrayref({});
+
+  my %pairs;
+  for my $link (@$links) {
+    my $pair_name = $link->{cap_transcript_id} . '/' . $link->{vb_transcript_id};
+    if ($pairs{$pair_name}) {
+      my $old_link = $pairs{$pair_name};
+      if ($old_link->{link_rank} < $link->{link_rank}) {
+        $pairs{$pair_name} = $link;
+      }
+    } else {
+      $pairs{$pair_name} = $link;
+    }
+  }
+
+  # Get the links with the specific rank
+  my @rank_links = map { $pairs{$_} } grep { $pairs{$_}->{link_rank} == $rank } keys %pairs;
+
+  return \@rank_links;
 }
 
 sub _get_transcript_pair_with_min_count {
@@ -143,13 +173,13 @@ sub _get_transcript_pair_with_min_count {
 sub _get_lowest_count {
   my ($array_ref) = @_;
 
-  my @sorted_array = sort { $a->[3] <=> $b->[3] } @{$array_ref};
+  my @sorted_array = sort { $a->{group_count} <=> $b->{group_count} } @{$array_ref};
   my $row          = shift @sorted_array;
-  my $lowest_count = $row->[3];
+  my $lowest_count = $row->{group_count};
 
   push(my (@least_count), $row);
   foreach my $row (@sorted_array) {
-    my $count = $row->[3];
+    my $count = $row->{group_count};
     if ($count == $lowest_count) {
       push(my (@least_count), $row);
     } else {
@@ -171,8 +201,10 @@ sub _is_transcript_uniq {
   my %cap_ids;
   my %vb_ids;
   my @uniq_pair;
-  foreach my $transcript_pair (@{$least_count}) {
-    my ($id, $cap_transcript_id, $vb_transcript_id, $group_count) = @{$transcript_pair};
+  foreach my $pair (@{$least_count}) {
+    my $id = $pair->{id};
+    my $cap_transcript_id = $pair->{cap_transcript_id};
+    my $vb_transcript_id = $pair->{vb_transcript_id};
 
     if ((exists $cap_ids{$cap_transcript_id}) or (exists $vb_ids{$vb_transcript_id})) {
 
@@ -180,7 +212,7 @@ sub _is_transcript_uniq {
     } else {
       $cap_ids{$cap_transcript_id} = 1;
       $vb_ids{$vb_transcript_id}   = 1;
-      push @uniq_pair, $transcript_pair;
+      push @uniq_pair, $pair;
     }
   }
   return \@uniq_pair;
@@ -192,15 +224,17 @@ sub _remove_redundant_transcript {
   my %cap_ids;
   my %vb_ids;
 
-  foreach my $uniq_pair (@{$uniq_pairs}) {
-    my ($id, $cap_transcript_id, $vb_transcript_id, $group_count) = @{$uniq_pair};
+  foreach my $pair (@{$uniq_pairs}) {
+    my $cap_transcript_id = $pair->{cap_transcript_id};
+    my $vb_transcript_id = $pair->{vb_transcript_id};
     $cap_ids{$cap_transcript_id} = 1;
     $vb_ids{$vb_transcript_id}   = 1;
   }
 
   my $index = 0;
-  foreach my $transcript_pair (@{$array_ref}) {
-    my ($id, $cap_transcript_id, $vb_transcript_id, $group_count) = @{$transcript_pair};
+  foreach my $pair (@{$array_ref}) {
+    my $cap_transcript_id = $pair->{cap_transcript_id};
+    my $vb_transcript_id = $pair->{vb_transcript_id};
     if ((exists $cap_ids{$cap_transcript_id}) or (exists $vb_ids{$vb_transcript_id})) {
       splice(@{$array_ref}, $index, 1);
     } else {
@@ -265,7 +299,9 @@ sub _reset_unmapped_transcripts {
 sub _update_transcript_link_table {
   my ($dbh, $array_ref) = @_;
   foreach my $uniq_transcript_pair (@{$array_ref}) {
-    my ($id, $cap_transcript_id, $vb_transcript_id, $count) = @{$uniq_transcript_pair};
+    my $id = $uniq_transcript_pair->{id};
+    my $cap_transcript_id = $uniq_transcript_pair->{cap_transcript_id};
+    my $vb_transcript_id = $uniq_transcript_pair->{vb_transcript_id};
     my $set_row_mapped_sql =
       "update transcript_links set link_status = 'mapped' where id = \'$id\';";
     $dbh->do($set_row_mapped_sql);
