@@ -363,7 +363,8 @@ sub _split_gene {
     identical     => 1,
     exon_boundary => 2,
     exon_number   => 3,
-    CDS_change    => 4
+    CDS_change    => 4,
+    CDS_error     => 5
   );
 
   my $final_maptype = 'identical';
@@ -402,7 +403,8 @@ sub _merge_gene {
     identical     => 1,
     exon_boundary => 2,
     exon_number   => 3,
-    CDS_change    => 4
+    CDS_change    => 4,
+    CDS_error     => 5
   );
 
   my $final_maptype = 'identical';
