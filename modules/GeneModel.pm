@@ -52,6 +52,48 @@ use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use DBI;
 
+# Define supported biotypes
+require Exporter;
+our @ISA    = qw(Exporter);
+our @EXPORT_OK = qw(%BIOTYPE);
+my %known_biotypes = (
+  gene => [qw(
+    gene
+    protein_coding_gene
+    pseudogene
+    ncRNA_gene
+  )],
+  transcript => [qw(
+    mRNA
+    transcript
+    pseudogenic_transcript
+    ncRNA
+    lnc_RNA
+    scRNA
+    snRNA
+    snoRNA
+    rRNA
+    tRNA
+  )],
+  sub_feature => [qw(
+    exon
+    CDS
+    non_canonical_five_prime_splice_site
+    non_canonical_three_prime_splice_site
+  )],
+  skip => [qw(
+    region
+    five_prime_UTR
+    three_prime_UTR
+
+  )]
+);
+
+our %BIOTYPE = ();
+for my $name (keys %known_biotypes) {
+  $BIOTYPE{$name} = {map { $_ => 1 } @{$known_biotypes{$name}}};
+}
+
 my %types = (
   "gene"       => "gene_id",
   "transcript" => "transcript_id",
