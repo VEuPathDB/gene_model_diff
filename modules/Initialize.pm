@@ -466,11 +466,10 @@ sub _insert_gene_model {
 							select ?,?,?,?,?;";
   my $sth     = $dbh->prepare($insert_sql);
   my $gene_id = $hash->{gene_id};
-  foreach my $mRNA (@{$hash->{mRNA}}) {
-    foreach my $exon (@{$mRNA->{exon}}) {
-
+  foreach my $transcript (@{$hash->{transcript}}) {
+    foreach my $exon (@{$transcript->{exon}}) {
       $sth->bind_param(1, $exon->{exon_id});
-      $sth->bind_param(2, $mRNA->{mRNA_id});
+      $sth->bind_param(2, $transcript->{transcript_id});
       $sth->bind_param(3, $hash->{gene_id});
       $sth->bind_param(4, $source);
       $sth->bind_param(5, $hash->{validation_error_code});
