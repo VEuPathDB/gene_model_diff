@@ -67,25 +67,36 @@ my %known_biotypes = (
     mRNA
     transcript
     pseudogenic_transcript
-    ncRNA
-    lnc_RNA
-    scRNA
+
+    rRNA
     snRNA
     snoRNA
-    rRNA
     tRNA
+    ncRNA
+    miRNA
+    guide_RNA
+    RNase_MRP_RNA
+    telomerase_RNA
+    SRP_RNA
+    lnc_RNA
+    RNAse_P_RNA
+    scRNA
+    piRNA
+    tmRNA
+    enzymatic_RNA
   )],
   sub_feature => [qw(
     exon
     CDS
     non_canonical_five_prime_splice_site
     non_canonical_three_prime_splice_site
+    stop_codon_read_through
   )],
   skip => [qw(
     region
+    repeat_region
     five_prime_UTR
     three_prime_UTR
-
   )]
 );
 
