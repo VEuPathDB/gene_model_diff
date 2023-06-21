@@ -300,6 +300,7 @@ sub get_CDS {
   my $strand  = $mrna_obj->strand;
 
   my @CDS  = $mrna_obj->get_SeqFeatures('CDS');
+  return if not @CDS;
   my %attb = $CDS[0]->attributes;
 
   #only expects one CDS per mRNA, code will break if more.
@@ -379,6 +380,8 @@ sub get_CDS {
 
 sub get_translation {
   my ($CDS_sequence, $strand) = @_;
+
+  return if not $CDS_sequence;
 
   my $seqobj = Bio::Seq->new(-seq => $CDS_sequence);
   if ($strand eq '-' or $strand eq '-1') {
