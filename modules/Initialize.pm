@@ -83,11 +83,11 @@ sub load_gene_set {
     $fasta_file, $dsn,    $user,            $pass,   $prot_fasta
   ) = @_;
   my %stats = (
-    obsolete           => 0,
-    not_finished       => 0,
-    not_validated      => 0,
+    obsolete           => [],
+    not_finished       => [],
+    not_validated      => [],
+    no_gene_model      => [],
     total_loaded       => 0,
-    no_gene_model      => 0,
     ok_gene_model      => 0,
     preloaded_features => 0,
     genes              => 0,
@@ -115,12 +115,12 @@ sub load_gene_set {
     if ($source eq 'cap') {
       if (_gene_is_obsolete(\%attb)) {
         $infoLog->info("Gene $gene_id is obsolete");
-        $stats{obsolete}++;
+        push @{$stats{obsolete}}, $gene_id;
         next;
       }
       if (not _gene_is_finished(\%attb)) {
         $infoLog->info("Gene $gene_id is not finished");
-        $stats{not_finished}++;
+        push @{$stats{not_finished}}, $gene_id;
         next;
       }
     }
@@ -131,7 +131,7 @@ sub load_gene_set {
     }
 
     if ($source eq 'cap' and $passed_validation < 0) {
-      $stats{not_validated}++;
+      push @{$stats{not_validated}}, $gene_id;
       $infoLog->info("Gene $gene_id did not pass validation");
     }
 
@@ -145,7 +145,7 @@ sub load_gene_set {
         _insert_CDS($gene_model, $dbh, $source);
       }
     } else {
-      $stats{no_gene_model}++;
+      push @{$stats{no_gene_model}}, $gene_id;
     }
 
     $stats{total_loaded}++;

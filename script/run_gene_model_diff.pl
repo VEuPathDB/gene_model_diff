@@ -203,7 +203,24 @@ sub print_stats {
 
   open my $outfh, ">", $outfile;
   for my $key (sort keys %$stats) {
-    print $outfh "$key\t$stats->{$key}\n";
+    my $arr = $stats->{$key};
+    my $val = $arr;
+    if (ref($arr) eq "ARRAY") {
+      $val = scalar(@$arr);
+    }
+    print $outfh "$key\t$val\n";
+  }
+
+  # Details
+  for my $key (sort keys %$stats) {
+    my $arr = $stats->{$key};
+    next if ref($arr) ne "ARRAY";
+    next if @$arr == 0;
+
+    print $outfh "\n$key:\n";
+    for my $id (sort @$arr) {
+      print $outfh "\t$id\n";
+    }
   }
 }
 
@@ -370,6 +387,8 @@ sub write_gff_to_load {
     $load_total_count++;
   }
 
+  my $errorLog  = Log::Log4perl->get_logger("errorlogger");
+
   my $cap_gff = "$gff_file_dir/cap.gff";
   open my $cap_gff_fh,  '<', $cap_gff                         or die "can't open $cap_gff\n";
   open my $load_gff_fh, '>', "$gff_file_dir/genes_2_load.gff" or die "can't open gene_2_load.gff\n";
@@ -399,25 +418,25 @@ sub write_gff_to_load {
         print $load_gff_fh $vb_gff_line;
         $gff_gene_count++;
       } else {
-        print("No hash for $biotype $ID\n");
+        $errorLog->info("No hash for $biotype $ID");
       }
     } elsif (exists $BIOTYPE{transcript}{$biotype}) {
       if (exists $loaded_hash{$parent}) {
         $parents_hash{$ID} = 1;
         print $load_gff_fh $vb_gff_line;
       } else {
-        print("No parent for $biotype $ID\n");
+        $errorLog->info("No parent for $biotype $ID");
       }
     } elsif (exists $BIOTYPE{sub_feature}{$biotype}) {
       if (exists $parents_hash{$parent}) {
         print $load_gff_fh $vb_gff_line;
       } else {
-        print("No parent for $biotype $ID\n");
+        $errorLog->info("No parent for $biotype $ID");
       }
     } elsif (exists $BIOTYPE{skip}{$biotype}) {
       continue;
     } else {
-      print("Skip $biotype $ID in final GFF: not supported\n");
+      $errorLog->info("Skip $biotype $ID in final GFF: not supported");
     }
   }
 }
