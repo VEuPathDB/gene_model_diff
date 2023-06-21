@@ -66,6 +66,7 @@ use TranscriptMapping;
 use GeneMapping;
 use AnnotationEvents;
 use Initialize;
+use GeneModel qw(%BIOTYPE);
 
 my $event_new_count;
 my $event_change_count;
@@ -393,20 +394,30 @@ sub write_gff_to_load {
     $columns[1] = 'VectorBase';
     my $vb_gff_line = join("\t", @columns) . "\n";
 
-    if ($biotype eq 'gene') {
+    if (exists $BIOTYPE{gene}{$biotype}) {
       if (exists $loaded_hash{$ID}) {
         print $load_gff_fh $vb_gff_line;
         $gff_gene_count++;
+      } else {
+        print("No hash for $biotype $ID\n");
       }
-    } elsif ($biotype eq 'mRNA') {
+    } elsif (exists $BIOTYPE{transcript}{$biotype}) {
       if (exists $loaded_hash{$parent}) {
         $parents_hash{$ID} = 1;
         print $load_gff_fh $vb_gff_line;
+      } else {
+        print("No parent for $biotype $ID\n");
       }
-    } elsif ($biotype eq 'exon' or $biotype eq 'CDS') {
+    } elsif (exists $BIOTYPE{sub_feature}{$biotype}) {
       if (exists $parents_hash{$parent}) {
         print $load_gff_fh $vb_gff_line;
+      } else {
+        print("No parent for $biotype $ID\n");
       }
+    } elsif (exists $BIOTYPE{skip}{$biotype}) {
+      continue;
+    } else {
+      print("Skip $biotype $ID in final GFF: not supported\n");
     }
   }
 }
