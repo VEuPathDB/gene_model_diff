@@ -434,7 +434,7 @@ sub write_gff_to_load {
         $errorLog->info("No parent for $biotype $ID");
       }
     } elsif (exists $BIOTYPE{skip}{$biotype}) {
-      continue;
+      next;
     } else {
       $errorLog->info("Skip $biotype $ID in final GFF: not supported");
     }
