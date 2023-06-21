@@ -196,23 +196,24 @@ sub validate_gene {
 
       # Check CDS sequence errors
       my $CDS_sequence = Initialize::get_CDS($mRNA, $validation_fh);
+      my $prot_seq = "";
       unless ($CDS_sequence) {
         $errorLog->error("No CDS for $mRNA_ID");
-      }
-      my $prot_seq = Initialize::get_translation($CDS_sequence, $mRNA_hash{strand});
-      unless ($prot_seq) {
-        $errorLog->error("No translation for $mRNA_ID");
+      } else {
+        $prot_seq = Initialize::get_translation($CDS_sequence, $mRNA_hash{strand});
+        unless ($prot_seq) {
+          $errorLog->error("No translation for $mRNA_ID");
+        }
       }
 
-      my $sequence_check;
+      my $sequence_check = "";
 
-      #if (not $prot_fasta_seq) {
-      #	say("No prot fasta seq for $mRNA_id");
-      #}
-      if (not $prot_fasta_seq or $prot_seq eq $prot_fasta_seq) {
+      if (not $prot_seq) {
+        $sequence_check="No_sequence";
+      	# say("No prot fasta seq for $mRNA_id");
+      } elsif (not $prot_fasta_seq or $prot_seq eq $prot_fasta_seq) {
         $sequence_check = _check_seq($prot_seq, \$validation_text);
       } else {
-
         #say("Protein sequence differs:\n>$mRNA_id\n$prot_seq\n----\n$prot_fasta_seq");
         $sequence_check = _check_seq($prot_fasta_seq, \$validation_text);
       }
