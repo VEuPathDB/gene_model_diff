@@ -272,23 +272,35 @@ sub _build_gene_model {
 
     my @exons = $tr->get_SeqFeatures('exon');
 
-    my $exon_number = 1;
-    foreach my $exon (@exons) {
-      my %exon_attb = $exon->attributes;
-      my %exon_model;
+    if (@exons) {
+      my $exon_number = 1;
+      foreach my $exon (@exons) {
+        my %exon_attb = $exon->attributes;
+        my %exon_model;
 
-      # Make unique exon id
-      if ($exon_attb{load_id}->[0]) {
-        $exon_model{exon_id} = $exon_attb{load_id}->[0];
-      } else {
-        $exon_model{exon_id} = $exon_attb{parent_id}->[0] . $exon_number;
-        $exon_number++;
+        # Make unique exon id
+        if ($exon_attb{load_id}->[0]) {
+          $exon_model{exon_id} = $exon_attb{load_id}->[0];
+        } else {
+          $exon_model{exon_id} = $exon_attb{parent_id}->[0] . $exon_number;
+          $exon_number++;
+        }
+
+        $exon_model{scaffold} = $exon->seq_id;
+        $exon_model{strand}   = $exon->strand;
+        $exon_model{start}    = $exon->start;
+        $exon_model{end}      = $exon->end;
+
+        push @{$tr_model{exon}}, \%exon_model;
       }
-
-      $exon_model{scaffold} = $exon->seq_id;
-      $exon_model{strand}   = $exon->strand;
-      $exon_model{start}    = $exon->start;
-      $exon_model{end}      = $exon->end;
+    } else {
+      # No exons? Create one from the transcript
+      my %exon_model = ();
+      $exon_model{exon_id} = $tr_model{transcript_id} . "-exon";
+      $exon_model{scaffold} = $tr->seq_id;
+      $exon_model{strand}   = $tr->strand;
+      $exon_model{start}    = $tr->start;
+      $exon_model{end}      = $tr->end;
 
       push @{$tr_model{exon}}, \%exon_model;
     }
