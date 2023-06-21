@@ -57,6 +57,7 @@ use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use Digest::MD5 qw(md5_hex);
 use Validate;
+use GeneModel qw(%BIOTYPE);
 
 use Bio::Seq;
 use Bio::SeqIO;
@@ -96,6 +97,8 @@ sub load_gene_set {
   my $proteins = _load_proteins($prot_fasta);
 
   $stats{preloaded_features} = _gff_load($gff_file, $fasta_file, $dsn, $user, $pass);
+
+  _check_biotypes($db);
 
   my @genes      = $db->get_features_by_type('gene');
   my @prot_genes = $db->get_features_by_type('protein_coding_gene');
@@ -143,6 +146,23 @@ sub load_gene_set {
   }
 
   return \%stats;
+}
+
+sub _check_biotypes {
+  my ($db) = @_;
+
+  my %known_types = ();
+  for my $name (keys %BIOTYPE) {
+    %known_types = (%known_types, %{$BIOTYPE{$name}});
+  }
+  my @unsupported = ();
+  for my $biotype ($db->types) {
+    $biotype =~ s/:.+$//;
+    if (not exists $known_types{$biotype}) {
+      push @unsupported, $biotype;
+    }
+  }
+  die("Unknown biotypes: " . join(", ", @unsupported)) if @unsupported;
 }
 
 sub _load_proteins {
