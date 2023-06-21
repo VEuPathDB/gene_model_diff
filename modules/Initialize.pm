@@ -102,9 +102,10 @@ sub load_gene_set {
 
   my @genes      = $db->get_features_by_type('gene');
   my @prot_genes = $db->get_features_by_type('protein_coding_gene');
+  my @pseudogenes = $db->get_features_by_type('pseudogene');
 
   $stats{genes} = scalar(@genes);
-  @genes = (@genes, @prot_genes);
+  @genes = (@genes, @prot_genes, @pseudogenes);
   open my $validation_fh, '>>', $validation_file;
   foreach my $gene (@genes) {
 
@@ -237,32 +238,34 @@ sub _build_gene_model {
   $gene_model{validation_error_code} = $attb{validation_error_code}->[0];
 
   my @mRNAs = $gene->get_SeqFeatures('mRNA');
-MRNA: foreach my $mRNA (@mRNAs) {
-    my %mRNA_model;
-    my %rna_attb                   = $mRNA->attributes;
-    my $mRNA_validation_error_code = $rna_attb{validation_error_code}->[0];
+  my @transcripts = $gene->get_SeqFeatures();
 
-    $mRNA_model{mRNA_id}               = $rna_attb{load_id}->[0];
-    $mRNA_model{validation_error_code} = $mRNA_validation_error_code;
+  TRAN: foreach my $tr (@transcripts) {
+    my %tr_model;
+    my %rna_attb                   = $tr->attributes;
+    my $RNA_validation_error_code  = $rna_attb{validation_error_code}->[0];
 
-    my @CDS = $mRNA->get_SeqFeatures('CDS');
+    $tr_model{transcript_id}         = $rna_attb{load_id}->[0];
+    $tr_model{validation_error_code} = $RNA_validation_error_code;
+
+    my @CDS = $tr->get_SeqFeatures('CDS');
     if (scalar(@CDS) > 0) {
       $CDS_present = 1;
-      my $CDS_sequence = get_CDS($mRNA, '');
+      my $CDS_sequence = get_CDS($tr, '');
       return if not $CDS_sequence;
 
-      my $prot_seq     = get_translation($CDS_sequence, $mRNA->strand);
+      my $prot_seq     = get_translation($CDS_sequence, $tr->strand);
       my $md5_checksum = md5_hex($prot_seq);
 
       my %cds_attb = $CDS[0]->attributes;
-      $mRNA_model{cds_start}        = $CDS[0]->start;
-      $mRNA_model{cds_end}          = $CDS[0]->end;
-      $mRNA_model{CDS_Parent_id}    = $cds_attb{parent_id}->[0];
-      $mRNA_model{CDS_md5_checksum} = $md5_checksum;
-      $mRNA_model{cds_error_code}   = $mRNA_validation_error_code;
+      $tr_model{cds_start}        = $CDS[0]->start;
+      $tr_model{cds_end}          = $CDS[0]->end;
+      $tr_model{CDS_Parent_id}    = $cds_attb{parent_id}->[0];
+      $tr_model{CDS_md5_checksum} = $md5_checksum;
+      $tr_model{cds_error_code}   = $RNA_validation_error_code;
     }
 
-    my @exons = $mRNA->get_SeqFeatures('exon');
+    my @exons = $tr->get_SeqFeatures('exon');
 
     my $exon_number = 1;
     foreach my $exon (@exons) {
@@ -282,9 +285,9 @@ MRNA: foreach my $mRNA (@mRNAs) {
       $exon_model{start}    = $exon->start;
       $exon_model{end}      = $exon->end;
 
-      push @{$mRNA_model{exon}}, \%exon_model;
+      push @{$tr_model{exon}}, \%exon_model;
     }
-    push @{$gene_model{mRNA}}, \%mRNA_model;
+    push @{$gene_model{transcript}}, \%tr_model;
   }
 
   return (\%gene_model, $CDS_present);
