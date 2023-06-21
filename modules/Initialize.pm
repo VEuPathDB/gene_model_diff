@@ -108,22 +108,27 @@ sub load_gene_set {
   @genes = (@genes, @prot_genes, @pseudogenes);
   open my $validation_fh, '>>', $validation_file;
   foreach my $gene (@genes) {
-
     my %attb    = $gene->attributes;
     my $gene_id = $attb{load_id}->[0];
 
     # Exclude some gene models
     if ($source eq 'cap') {
       if (_gene_is_obsolete(\%attb)) {
+        $infoLog->info("Gene $gene_id is obsolete");
         $stats{obsolete}++;
         next;
       }
       if (not _gene_is_finished(\%attb)) {
+        $infoLog->info("Gene $gene_id is not finished");
         $stats{not_finished}++;
         next;
       }
     }
-    my $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
+    # Only validate the new gene models
+    my $passed_validation = 1;
+    if ($source eq 'cap') {
+      $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
+    }
 
     if ($source eq 'cap' and $passed_validation < 0) {
       $stats{not_validated}++;
