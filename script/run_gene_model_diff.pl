@@ -136,7 +136,6 @@ sub run_species {
   @split_gene_counts    = 0;
 
   warn "Running $species\n";
-
   create_database($config, $species);
   my $genes_loaded = load_database($config, $species);
 
@@ -144,6 +143,7 @@ sub run_species {
   if ($genes_loaded) {
     run_gene_set_comparison($dbh);
 
+    print("Write out files...\n");
     get_events($dbh);
     write_events($config, $species);
     write_delete_list($config, $species);
@@ -270,13 +270,18 @@ sub prune_gff_by_scaffold {
 sub run_gene_set_comparison {
   my ($dbh) = @_;
 
+  print("Work out exon mapping...\n");
   ExonMapping::work_out_exon_mapping($dbh);
+  print("Work out gene clusters...\n");
   GeneClusters::work_out_gene_clusters($dbh);
+  print("Calculate cluster summary...\n");
   GeneClusters::calculate_cluster_summary($dbh);
+  print("Work out transcript_links...\n");
   TranscriptLinks::work_out_transcript_links($dbh);
+  print("Resolve transcript mappings...\n");
   TranscriptMapping::resolve_transcript_mappings($dbh);
+  print("Resolve maptype cluster...\n");
   GeneMapping::resolve_maptype_cluster($dbh);
-
 }
 
 sub get_events {
