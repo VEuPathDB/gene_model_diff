@@ -412,7 +412,7 @@ sub write_gff_to_load {
     next unless $biotype;
 
     my %attrib = parse_attribs($columns[8]);
-    my $ID     = $attrib{ID};
+    my $ID     = $attrib{ID} // "(NA)";
     my $parent = $attrib{Parent};
 
     $columns[1] = 'VectorBase';
