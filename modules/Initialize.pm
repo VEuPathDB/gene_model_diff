@@ -427,8 +427,8 @@ sub _insert_exon {
 					 )
 					 select ?,?,?,?,?,?;";
   my $sth = $dbh->prepare($insert_sql);
-  foreach my $mRNA (@{$hash->{mRNA}}) {
-    foreach my $exon (@{$mRNA->{exon}}) {
+  foreach my $transcript (@{$hash->{transcript}}) {
+    foreach my $exon (@{$transcript->{exon}}) {
       $sth->bind_param(1, $exon->{exon_id});
       $sth->bind_param(2, $source);
       $sth->bind_param(3, $exon->{scaffold});
@@ -454,13 +454,13 @@ sub _insert_CDS {
 					 select ?,?,?,?,?;";
 
   my $sth = $dbh->prepare($insert_sql);
-  foreach my $mRNA (@{$hash->{mRNA}}) {
+  foreach my $transcript (@{$hash->{transcript}}) {
 
-    $sth->bind_param(1, $mRNA->{CDS_Parent_id});
-    $sth->bind_param(2, $mRNA->{cds_start});
-    $sth->bind_param(3, $mRNA->{cds_end});
-    $sth->bind_param(4, $mRNA->{CDS_md5_checksum});
-    $sth->bind_param(5, $mRNA->{cds_error_code});
+    $sth->bind_param(1, $transcript->{CDS_Parent_id});
+    $sth->bind_param(2, $transcript->{cds_start});
+    $sth->bind_param(3, $transcript->{cds_end});
+    $sth->bind_param(4, $transcript->{CDS_md5_checksum});
+    $sth->bind_param(5, $transcript->{cds_error_code});
 
     $sth->execute();
   }
