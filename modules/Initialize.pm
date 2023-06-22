@@ -126,9 +126,7 @@ sub load_gene_set {
     }
     # Only validate the new gene models
     my $passed_validation = 1;
-    if ($source eq 'cap') {
-      $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
-    }
+    $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
 
     if ($source eq 'cap' and $passed_validation < 0) {
       push @{$stats{not_validated}}, $gene_id;
