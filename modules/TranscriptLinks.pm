@@ -76,9 +76,9 @@ sub work_out_transcript_links {
     my $transcript_pairs = _make_transcript_pairs($dbh, $gene_cluster);
     foreach my $transcript_pair (@{$transcript_pairs}) {
       my $ranks = _rank_transcript_pair($dbh, $transcript_pair);
-      my ($cap_id, $vb_id) = split /:/, $transcript_pair;
+      my ($cap_id, $vb_id) = @$transcript_pair;
       unless ($ranks) {
-        $errorLog->error("No rank was returned for transcript pair: $transcript_pair");
+        $errorLog->error("No rank was returned for transcript pair: @$transcript_pair");
         next;
       }
       foreach my $group (keys %{$ranks}) {
@@ -111,7 +111,7 @@ sub _make_transcript_pairs {
 
   foreach my $cap_id (@cap) {
     foreach my $vb_id (@vb) {
-      push @pairs, "$cap_id:$vb_id";
+      push @pairs, [$cap_id, $vb_id];
     }
   }
   return \@pairs;
@@ -140,7 +140,7 @@ sub _rank_transcript_pair {
     CDS_error   => 'CDS_error'
   );
   my %maptype_count;
-  my ($cap_transcript_id, $vb_transcript_id) = split /:/, $transcript_pair;
+  my ($cap_transcript_id, $vb_transcript_id) = @$transcript_pair;
   my $cap_exons = GeneModel::get_exons_by_transcript_id($dbh, $cap_transcript_id, 'cap');
   my $vb_exons  = GeneModel::get_exons_by_transcript_id($dbh, $vb_transcript_id,  'vb');
   my ($exon_maptype_array, $no_exon_maptype_array) = _compare_exons($dbh, $cap_exons, $vb_exons);
