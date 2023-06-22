@@ -201,15 +201,21 @@ sub _compare_exons {
 
 sub _compare_cds {
   my ($dbh, $cap_transcript_id, $vb_transcript_id) = @_;
-  my ($cap_cds_checksum) = CDS::get_cds_checksum_by_parent_id($dbh, $cap_transcript_id);
+
   my ($cap_error_code)   = CDS::get_cds_error_code_by_parent_id($dbh, $cap_transcript_id);
-  my ($vb_cds_checksum)  = CDS::get_cds_checksum_by_parent_id($dbh, $vb_transcript_id);
   my ($vb_error_code)    = CDS::get_cds_error_code_by_parent_id($dbh, $vb_transcript_id);
+  
+  # In case one of those does not have a CDS (e.g. pseudogene <-> protein_coding_gene)
+  if (not $cap_error_code or not $vb_error_code) {
+    return 0;
+  }
 
   if ($cap_error_code > $vb_error_code) {
     return 'CDS_error';
   }
 
+  my ($cap_cds_checksum) = CDS::get_cds_checksum_by_parent_id($dbh, $cap_transcript_id);
+  my ($vb_cds_checksum)  = CDS::get_cds_checksum_by_parent_id($dbh, $vb_transcript_id);
   if ($cap_cds_checksum ne $vb_cds_checksum) {
     return 'CDS_change';
   } else {
