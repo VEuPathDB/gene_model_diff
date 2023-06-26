@@ -139,7 +139,11 @@ sub update_maptype {
 sub get_gene_mappings_by_maptype {
   my ($dbh, $maptype) = @_;
 
-  my $sql       = "select cap_gene_id,vb_gene_id from gene_mappings where map_type = \'$maptype\';";
+  my $sql       = "select cap_gene_id, vb_gene_id, cap.biotype AS cap_biotype, vb.biotype AS vb_biotype"
+                ." from gene_mappings"
+                ." LEFT JOIN gene_model cap ON(cap_gene_id=cap.gene_id)"
+                ." LEFT JOIN gene_model vb ON(vb_gene_id=vb.gene_id)"
+                ."where map_type = \'$maptype\';";
   my $array_ref = _submit_sql($dbh, $sql);
   return $array_ref;
 
