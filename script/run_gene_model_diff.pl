@@ -325,12 +325,12 @@ sub write_events {
 
   foreach my $row (@{$events_ref}) {
     my ($vb_gene_id, $cap_gene_id, $event, $vb_biotype, $cap_biotype) = @{$row};
-    my @line = ("Ge");
 
     if ( (defined($vb_gene_id) and exists $duplicate_ids{$vb_gene_id})
       or (defined($cap_gene_id) and exists $duplicate_ids{$cap_gene_id}))
     {
-      print $file_handle "Duplicate\t$vb_gene_id~$cap_gene_id\n//\n";
+      my @line = ("Duplicate", $vb_gene_id . $symbol{identical} . $cap_gene_id, "");
+      print $file_handle join("\t", @line) . "\n//\n";
     } elsif ($event eq 'new_gene') {
       $duplicate_ids{$cap_gene_id} = 1;
     } else {
@@ -338,8 +338,11 @@ sub write_events {
       $duplicate_ids{$cap_gene_id} = 1;
     }
 
+    my @line = ("Ge");
     $vb_gene_id //= "";
     $cap_gene_id //= "";
+    $vb_biotype //= "";
+    $cap_biotype //= "";
     my $relation_ids = $vb_gene_id . $symbol{$event} . $cap_gene_id;
     my $biotypes = $vb_biotype . $symbol{$event} . $cap_biotype;
     push @line, $relation_ids;
