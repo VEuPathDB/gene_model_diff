@@ -143,7 +143,8 @@ sub get_gene_mappings_by_maptype {
                 ." from gene_mappings"
                 ." LEFT JOIN gene_model cap ON(cap_gene_id=cap.gene_id)"
                 ." LEFT JOIN gene_model vb ON(vb_gene_id=vb.gene_id)"
-                ."where map_type = \'$maptype\';";
+                ." where map_type = \'$maptype\'"
+                ." GROUP BY cap.gene_id, vb.gene_id;";
   my $array_ref = _submit_sql($dbh, $sql);
   return $array_ref;
 
