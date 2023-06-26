@@ -302,7 +302,7 @@ sub write_events {
   my $datadir      = $config->val('Data', 'datadir');
   my $gff_file_dir = "$datadir/$species";
   open my $file_handle, '>', "$gff_file_dir/annotation_events.txt";
-  my $sql = 'select vb_gene_id,cap_gene_id,events from gene_events;';
+  my $sql = 'select vb_gene_id ,cap_gene_id, events, vb_biotype, cap_biotype from gene_events;';
 
   my $sth = $dbh->prepare($sql);
   $sth->execute();
@@ -313,8 +313,20 @@ sub write_events {
     #die "No events found\n;";
   }
 
+  my %symbol = (
+    identical     => "~",
+    change_gene   => "=",
+    gain_iso_form => "=+",
+    lost_iso_form => "=-",
+    new_gene      => "+",
+    merge_gene    => ">",
+    split_gene    => "<",
+  );
+
   foreach my $row (@{$events_ref}) {
-    my ($vb_gene_id, $cap_gene_id, $event) = @{$row};
+    my ($vb_gene_id, $cap_gene_id, $event, $vb_biotype, $cap_biotype) = @{$row};
+    my @line = ("Ge");
+
     if ( (defined($vb_gene_id) and exists $duplicate_ids{$vb_gene_id})
       or (defined($cap_gene_id) and exists $duplicate_ids{$cap_gene_id}))
     {
@@ -326,30 +338,28 @@ sub write_events {
       $duplicate_ids{$cap_gene_id} = 1;
     }
 
-    if ($event eq 'identical') {
-      print $file_handle "Ge\t$vb_gene_id~$cap_gene_id\n//\n";
-    }
+    $vb_gene_id //= "";
+    $cap_gene_id //= "";
+    my $relation_ids = $vb_gene_id . $symbol{$event} . $cap_gene_id;
+    my $biotypes = $vb_biotype . $symbol{$event} . $cap_biotype;
+    push @line, $relation_ids;
+    push @line, $biotypes;
 
     if ($event eq 'change_gene') {
-      print $file_handle "Ge\t$vb_gene_id=$cap_gene_id\n//\n";
       $event_change_count++;
     } elsif ($event eq 'gain_iso_form') {
-      print $file_handle "Ge\t$vb_gene_id=+$cap_gene_id\n//\n";
       $event_iso_gain_count++;
     } elsif ($event eq 'lost_iso_form') {
-      print $file_handle "Ge\t$vb_gene_id=-$cap_gene_id\n//\n";
       $event_iso_lost_count++;
     } elsif ($event eq 'new_gene') {
-      print $file_handle "Ge\t+$cap_gene_id\n//\n";
       $event_new_count++;
     } elsif ($event eq "merge_gene") {
-      print $file_handle "Ge\t$vb_gene_id>$cap_gene_id\n//\n";
       $event_merge_count++;
     } elsif ($event eq "split_gene") {
-      print $file_handle "Ge\t$vb_gene_id<$cap_gene_id\n//\n";
       $event_split_count++;
     }
 
+    print $file_handle join("\t", @line) . "\n//\n";
   }
 
 }
