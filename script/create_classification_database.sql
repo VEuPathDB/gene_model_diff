@@ -26,7 +26,8 @@ create table if not exists gene_model(
 			transcript_id varchar(500),
 			gene_id       varchar(500),
 			source        varchar(500),
-			error_code	  int
+			error_code	  int,
+			biotype       varchar(500)
 );
 create index idx_gene_model_trid on gene_model(transcript_id, source(1));
 create index idx_genemodel_geneid on gene_model(gene_id, source(1));
@@ -109,7 +110,9 @@ create table if not exists gene_events(
 			id       int not null AUTO_INCREMENT PRIMARY KEY,
 			vb_gene_id  TEXT default NULL,
 			cap_gene_id TEXT default NULL,
-			events  	varchar(500)   
+			events  	varchar(500),
+			vb_biotype varchar(500),
+			cap_biotype varchar(500)
 );
 
 
