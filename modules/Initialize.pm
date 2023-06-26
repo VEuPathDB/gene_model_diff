@@ -239,9 +239,12 @@ sub _build_gene_model {
   my $CDS_present = 0;
   $gene_model{gene_id}               = $attb{load_id}->[0];
   $gene_model{validation_error_code} = $attb{validation_error_code}->[0];
+  $gene_model{biotype} = $gene->type;
+  $gene_model{biotype} =~ s/:.+$//;
 
   my @mRNAs = $gene->get_SeqFeatures('mRNA');
   my @transcripts = $gene->get_SeqFeatures();
+  my %tr_biotypes = ();
 
   TRAN: foreach my $tr (@transcripts) {
     my %tr_model;
@@ -250,6 +253,9 @@ sub _build_gene_model {
 
     $tr_model{transcript_id}         = $rna_attb{load_id}->[0];
     $tr_model{validation_error_code} = $RNA_validation_error_code;
+    $tr_model{biotype} = $tr->type;
+    $tr_model{biotype} =~ s/:.+$//;
+    $tr_biotypes{$tr_model{biotype}} = 1;
 
     my @CDS = $tr->get_SeqFeatures('CDS');
     if (scalar(@CDS) > 0) {
@@ -303,6 +309,11 @@ sub _build_gene_model {
       push @{$tr_model{exon}}, \%exon_model;
     }
     push @{$gene_model{transcript}}, \%tr_model;
+  }
+
+  if ($gene_model{biotype} eq 'gene') {
+    my $gene_biotype = join(",",(sort keys %tr_biotypes));
+    $gene_model{biotype} = $gene_biotype;
   }
 
   return (\%gene_model, $CDS_present);
@@ -471,9 +482,10 @@ sub _insert_gene_model {
 										transcript_id,
 										gene_id,
 										source,
-										error_code
+										error_code,
+                    biotype
 									   )
-							select ?,?,?,?,?;";
+							select ?,?,?,?,?,?;";
   my $sth     = $dbh->prepare($insert_sql);
   my $gene_id = $hash->{gene_id};
   foreach my $transcript (@{$hash->{transcript}}) {
@@ -483,6 +495,7 @@ sub _insert_gene_model {
       $sth->bind_param(3, $hash->{gene_id});
       $sth->bind_param(4, $source);
       $sth->bind_param(5, $hash->{validation_error_code});
+      $sth->bind_param(6, $hash->{biotype});
 
       $sth->execute();
     }
