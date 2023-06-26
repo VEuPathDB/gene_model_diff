@@ -269,4 +269,22 @@ sub _submit_sql {
   return $array_ref;
 }
 
+=head2 get_distinct_id_by_source
+
+ Title: get_distinct_id_by_source
+ Usage: GeneModel::get_distinct_id_by_source($dbh,$type,$source)
+ Function: get all Get Gene/Transcript/exon/ ID for a source
+ Returns array ref of feature ID
+ Args: Database handle object, feature type, source.
+=cut
+
+sub get_gene_biotype_by_id {
+  my ($dbh, $id, $source) = @_;
+
+  my $sql       = "select biotype FROM gene_model where gene_id=\'$id\' and source=\'$source\';";
+  my $array_ref = _submit_sql($dbh, $sql);
+  my $biotype = $array_ref->[0]->[0];
+  return $biotype;
+}
+
 1;
