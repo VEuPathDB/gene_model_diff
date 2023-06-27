@@ -103,6 +103,7 @@ sub load_gene_set {
   my @genes      = $db->get_features_by_type('gene');
   my @prot_genes = $db->get_features_by_type('protein_coding_gene');
   my @pseudogenes = $db->get_features_by_type('pseudogene');
+  my $fingerprints = {};
 
   $stats{genes} = scalar(@genes);
   @genes = (@genes, @prot_genes, @pseudogenes);
@@ -126,7 +127,7 @@ sub load_gene_set {
     }
     # Only validate the new gene models
     my $passed_validation = 1;
-    $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
+    $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins, $fingerprints);
 
     if ($source eq 'cap' and $passed_validation < 0) {
       push @{$stats{not_validated}}, $gene_id;

@@ -71,7 +71,7 @@ use Bio::DB::SeqFeature::Store::GFF3Loader;
 =cut
 
 sub validate_gene {
-  my ($gene, $config, $validation_fh, $proteins) = @_;
+  my ($gene, $config, $validation_fh, $proteins, $cds_fingerprints) = @_;
   my %gene_attb = $gene->attributes;
   my $errorLog  = Log::Log4perl->get_logger("errorlogger");
 
@@ -93,10 +93,13 @@ sub validate_gene {
   $gene_hash{start}    = $gene->start;
   $gene_hash{end}      = $gene->end;
   my $strand = $gene->strand;
+  my $gene_id = $gene_attb{load_id}->[0];
 
   my @RNAs                   = $gene->get_SeqFeatures('mRNA');
   my $gene_validation_status = 0;
   my $validation_string      = '';
+  my $exon_fingerprints = {};
+  my @gene_cds_fingerprints;
 
   foreach my $mRNA (@RNAs) {
     my %mRNA_hash;
@@ -108,6 +111,18 @@ sub validate_gene {
     my $NO_ATG        = 0;
     my $NO_STOP       = 0;
     my $INTERNAL_STOP = 0;
+
+    # Check CDS fingerprints (within all genes)
+    push @gene_cds_fingerprints, _get_mRNA_fingerprint($mRNA, ['CDS']);
+
+    # Check exons and CDS fingerprints (only within gene)
+    my $exon_fingerprint = _get_mRNA_fingerprint($mRNA, ['CDS', 'exon']);
+    if ($exon_fingerprint and exists $exon_fingerprints->{$exon_fingerprint}) {
+        $validation_string .= "mRNA:$mRNA_id|Duplicate_mRNA_exons_CDS;";
+        $mRNA_validation_status += $validation_error_code{GFF_mRNA};
+    } else {
+        $exon_fingerprints->{$exon_fingerprint} = 1;
+    }
 
     my $has_no_atg  = exists $mRNA_attb{'no-ATG'};
     my $has_no_stop = exists $mRNA_attb{'no-STOP'};
@@ -328,6 +343,17 @@ sub validate_gene {
     }
   }
 
+  # Check CDS fingerprints
+  my %gene_fingerprints = map { $_ => 1 } @gene_cds_fingerprints;
+  for my $cds_fingerprint (sort keys %gene_fingerprints) {
+    if ($cds_fingerprint and exists $cds_fingerprints->{$cds_fingerprint}) {
+        $validation_string .= "Duplicate_gene_CDS;";
+        $gene_validation_status += $validation_error_code{GFF_mRNA};
+    } else {
+        $cds_fingerprints->{$cds_fingerprint} = 1;
+    }
+  }
+
   # Log if any error found
   if ($gene_validation_status) {
     my $gene_id = $gene_attb{load_id}->[0];
@@ -337,6 +363,22 @@ sub validate_gene {
   }
   $gene->add_tag_value('validation_error_code' => $gene_validation_status);
   return $gene_validation_status;
+}
+
+sub _get_mRNA_fingerprint {
+  my ($mRNA, $names) = @_;
+
+  my @fingerprints;
+  for my $name (@$names) {
+    my @feats;
+    for my $feat (sort $mRNA->get_SeqFeatures($name)) {
+      push @feats, $feat->seq_id. ":" . $feat->strand . ":" . $feat->start . "-" . $feat->end;
+    }
+    my $feat_fingerprint = "$name=" . join(",", sort @feats);
+    push @fingerprints, $feat_fingerprint;
+  }
+
+  return join(";", @fingerprints);
 }
 
 sub _check_subfeature {
