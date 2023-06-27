@@ -118,7 +118,7 @@ sub validate_gene {
     # Check exons and CDS fingerprints (only within gene)
     my $exon_fingerprint = _get_mRNA_fingerprint($mRNA, ['CDS', 'exon']);
     if ($exon_fingerprint and exists $exon_fingerprints->{$exon_fingerprint}) {
-        $validation_string .= "mRNA:$mRNA_id|Duplicate_mRNA_exons_CDS;";
+        $validation_string .= "mRNA:$mRNA_id|Duplicate_mRNA;";
         $mRNA_validation_status += $validation_error_code{GFF_mRNA};
     } else {
         $exon_fingerprints->{$exon_fingerprint} = 1;
@@ -224,8 +224,9 @@ sub validate_gene {
       my $sequence_check = "";
 
       if (not $prot_seq) {
-        $sequence_check="No_sequence";
-      	# say("No prot fasta seq for $mRNA_id");
+        $sequence_check="no_sequence";
+        $validation_string .= "No_sequence;";
+        $mRNA_validation_status += $validation_error_code{GFF_mRNA};
       } elsif (not $prot_fasta_seq or $prot_seq eq $prot_fasta_seq) {
         $sequence_check = _check_seq($prot_seq, \$validation_text);
       } else {
@@ -233,7 +234,7 @@ sub validate_gene {
         $sequence_check = _check_seq($prot_fasta_seq, \$validation_text);
       }
 
-      if ($sequence_check ne 'passed') {
+      if ($sequence_check ne 'passed' and $sequence_check ne 'no_sequence') {
         $validation_string .= "mRNA:$mRNA_ID";
         $validation_string .= "$validation_text;";
         $errorLog->error($validation_string);
@@ -374,8 +375,8 @@ sub _get_mRNA_fingerprint {
     for my $feat (sort $mRNA->get_SeqFeatures($name)) {
       push @feats, $feat->seq_id. ":" . $feat->strand . ":" . $feat->start . "-" . $feat->end;
     }
-    my $feat_fingerprint = "$name=" . join(",", sort @feats);
-    push @fingerprints, $feat_fingerprint;
+    my $feat_fingerprint = @feats ? "$name=" . join(",", sort @feats) : "";
+    push @fingerprints, $feat_fingerprint if $feat_fingerprint;
   }
 
   return join(";", @fingerprints);
