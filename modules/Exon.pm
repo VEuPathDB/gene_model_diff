@@ -119,14 +119,14 @@ sub _get_sql {
   } elsif ($sql_name eq 'spanning') {
     my $sql = $base_sql . "
       and cap.start  <= vb.start
-      and cap.start  >= vb.end";
+      and cap.end  >= vb.end";
     $sql .= $same_biotype_sql if $same_biotype;
     return $sql;
 
   } elsif ($sql_name eq 'included') {
     my $sql = $base_sql . "
       and cap.start  >= vb.start
-      and cap.start  <= vb.end";
+      and cap.end  <= vb.end";
     $sql .= $same_biotype_sql if $same_biotype;
     return $sql;
 
