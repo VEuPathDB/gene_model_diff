@@ -49,6 +49,7 @@ package AnnotationEvents;
 
 use strict;
 use warnings;
+use List::MoreUtils qw(zip);
 use GeneModel;
 
 =head2 
@@ -249,8 +250,9 @@ sub get_splits {
       push @cap_biotypes, $cap_biotype;
       $cap_genes++;
     }
-    my $cap_id_string = join(":", @cap_ids);
-    my $cap_biotype = join(":", @cap_biotypes);
+    my $cap_id_string = join(":", sort @cap_ids);
+    my %cap_id_biotype = zip @cap_ids, @cap_biotypes;
+    my $cap_biotype = join(":", map { $cap_id_biotype{$_} } sort @cap_ids);
     my $event_name = "split_gene";
     $insert_sth->execute($vb_gene_id, $cap_id_string, $event_name, $vb_biotype, $cap_biotype);
   }
@@ -296,8 +298,9 @@ sub get_merge {
       push @vb_ids, $vb_gene_id;
       $vb_genes--;
     }
-    my $vb_id_string = join(":", @vb_ids);
-    my $vb_biotype = join(":", @vb_biotypes);
+    my $vb_id_string = join(":", sort @vb_ids);
+    my %vb_id_biotype = zip @vb_ids, @vb_biotypes;
+    my $vb_biotype = join(":", map { $vb_id_biotype{$_} } sort @vb_ids);
     my $event_name = "merge_gene";
     $insert_sth->execute($vb_id_string, $cap_gene_id, $event_name, $vb_biotype, $cap_biotype);
   }
