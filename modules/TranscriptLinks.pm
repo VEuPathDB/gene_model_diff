@@ -206,7 +206,7 @@ sub _compare_cds {
   my ($vb_error_code)    = CDS::get_cds_error_code_by_parent_id($dbh, $vb_transcript_id);
   
   # In case one of those does not have a CDS (e.g. pseudogene <-> protein_coding_gene)
-  if (not $cap_error_code or not $vb_error_code) {
+  if (not defined $cap_error_code or not defined $vb_error_code) {
     return 0;
   }
 
