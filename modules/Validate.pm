@@ -348,8 +348,8 @@ sub validate_gene {
   my %gene_fingerprints = map { $_ => 1 } @gene_cds_fingerprints;
   for my $cds_fingerprint (sort keys %gene_fingerprints) {
     if ($cds_fingerprint and exists $cds_fingerprints->{$cds_fingerprint}) {
-        $validation_string .= "Duplicate_gene_CDS;";
-        $gene_validation_status += $validation_error_code{GFF_mRNA};
+        $validation_string .= "Duplicate_gene_CDS=$cds_fingerprint;";
+        $gene_validation_status = -$validation_error_code{GFF_mRNA};
     } else {
         $cds_fingerprints->{$cds_fingerprint} = 1;
     }

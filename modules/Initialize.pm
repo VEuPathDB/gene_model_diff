@@ -125,13 +125,13 @@ sub load_gene_set {
         next;
       }
     }
-    # Only validate the new gene models
     my $passed_validation = 1;
     $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins, $fingerprints);
 
     if ($source eq 'cap' and $passed_validation < 0) {
       push @{$stats{not_validated}}, $gene_id;
       $infoLog->info("Gene $gene_id did not pass validation");
+      next;
     }
 
     my ($gene_model, $CDS_present) = _build_gene_model($gene);
