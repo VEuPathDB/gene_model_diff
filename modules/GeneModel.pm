@@ -52,6 +52,59 @@ use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use DBI;
 
+# Define supported biotypes
+require Exporter;
+our @ISA    = qw(Exporter);
+our @EXPORT_OK = qw(%BIOTYPE);
+my %known_biotypes = (
+  gene => [qw(
+    gene
+    protein_coding_gene
+    pseudogene
+    ncRNA_gene
+  )],
+  transcript => [qw(
+    mRNA
+    transcript
+    pseudogenic_transcript
+
+    rRNA
+    snRNA
+    snoRNA
+    tRNA
+    ncRNA
+    miRNA
+    guide_RNA
+    RNase_MRP_RNA
+    telomerase_RNA
+    SRP_RNA
+    lnc_RNA
+    RNAse_P_RNA
+    scRNA
+    piRNA
+    tmRNA
+    enzymatic_RNA
+  )],
+  sub_feature => [qw(
+    exon
+    CDS
+    non_canonical_five_prime_splice_site
+    non_canonical_three_prime_splice_site
+    stop_codon_read_through
+  )],
+  skip => [qw(
+    region
+    repeat_region
+    five_prime_UTR
+    three_prime_UTR
+  )]
+);
+
+our %BIOTYPE = ();
+for my $name (keys %known_biotypes) {
+  $BIOTYPE{$name} = {map { $_ => 1 } @{$known_biotypes{$name}}};
+}
+
 my %types = (
   "gene"       => "gene_id",
   "transcript" => "transcript_id",
@@ -214,6 +267,24 @@ sub _submit_sql {
   my ($dbh, $sql) = @_;
   my $array_ref = $dbh->selectall_arrayref($sql);
   return $array_ref;
+}
+
+=head2 get_distinct_id_by_source
+
+ Title: get_distinct_id_by_source
+ Usage: GeneModel::get_distinct_id_by_source($dbh,$type,$source)
+ Function: get all Get Gene/Transcript/exon/ ID for a source
+ Returns array ref of feature ID
+ Args: Database handle object, feature type, source.
+=cut
+
+sub get_gene_biotype_by_id {
+  my ($dbh, $id, $source) = @_;
+
+  my $sql       = "select biotype FROM gene_model where gene_id=\'$id\' and source=\'$source\';";
+  my $array_ref = _submit_sql($dbh, $sql);
+  my $biotype = $array_ref->[0]->[0];
+  return $biotype;
 }
 
 1;

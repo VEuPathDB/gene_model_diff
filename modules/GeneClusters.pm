@@ -356,8 +356,13 @@ sub _filter_overlapping_cds {
 
     # See if the CDSs overlap
     # Only keep the genes that overlap even a little with a CDS
-    if (_overlapping_regions(\@query_cdss, \@return_cdss)) {
-      push @ok_return_gene_ids, $return_gene_id;
+    if (@query_cdss > 0 and @return_cdss > 0) {
+      if (_overlapping_regions(\@query_cdss, \@return_cdss)) {
+        push @ok_return_gene_ids, $return_gene_id;
+      }
+    # Pass if none of the genes have a CDS
+    } elsif (@query_cdss == 0 and @return_cdss == 0) {
+        push @ok_return_gene_ids, $return_gene_id;
     }
   }
 

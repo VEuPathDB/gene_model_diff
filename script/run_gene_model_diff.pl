@@ -66,6 +66,7 @@ use TranscriptMapping;
 use GeneMapping;
 use AnnotationEvents;
 use Initialize;
+use GeneModel qw(%BIOTYPE);
 
 my $event_new_count;
 my $event_change_count;
@@ -135,7 +136,6 @@ sub run_species {
   @split_gene_counts    = 0;
 
   warn "Running $species\n";
-
   create_database($config, $species);
   my $genes_loaded = load_database($config, $species);
 
@@ -143,6 +143,7 @@ sub run_species {
   if ($genes_loaded) {
     run_gene_set_comparison($dbh);
 
+    print("Write out files...\n");
     get_events($dbh);
     write_events($config, $species);
     write_delete_list($config, $species);
@@ -202,7 +203,24 @@ sub print_stats {
 
   open my $outfh, ">", $outfile;
   for my $key (sort keys %$stats) {
-    print $outfh "$key\t$stats->{$key}\n";
+    my $arr = $stats->{$key};
+    my $val = $arr;
+    if (ref($arr) eq "ARRAY") {
+      $val = scalar(@$arr);
+    }
+    print $outfh "$key\t$val\n";
+  }
+
+  # Details
+  for my $key (sort keys %$stats) {
+    my $arr = $stats->{$key};
+    next if ref($arr) ne "ARRAY";
+    next if @$arr == 0;
+
+    print $outfh "\n$key:\n";
+    for my $id (sort @$arr) {
+      print $outfh "\t$id\n";
+    }
   }
 }
 
@@ -252,13 +270,18 @@ sub prune_gff_by_scaffold {
 sub run_gene_set_comparison {
   my ($dbh) = @_;
 
+  print("Work out exon mapping...\n");
   ExonMapping::work_out_exon_mapping($dbh);
+  print("Work out gene clusters...\n");
   GeneClusters::work_out_gene_clusters($dbh);
+  print("Calculate cluster summary...\n");
   GeneClusters::calculate_cluster_summary($dbh);
+  print("Work out transcript_links...\n");
   TranscriptLinks::work_out_transcript_links($dbh);
+  print("Resolve transcript mappings...\n");
   TranscriptMapping::resolve_transcript_mappings($dbh);
+  print("Resolve maptype cluster...\n");
   GeneMapping::resolve_maptype_cluster($dbh);
-
 }
 
 sub get_events {
@@ -279,7 +302,7 @@ sub write_events {
   my $datadir      = $config->val('Data', 'datadir');
   my $gff_file_dir = "$datadir/$species";
   open my $file_handle, '>', "$gff_file_dir/annotation_events.txt";
-  my $sql = 'select vb_gene_id,cap_gene_id,events from gene_events;';
+  my $sql = 'select vb_gene_id ,cap_gene_id, events, vb_biotype, cap_biotype from gene_events;';
 
   my $sth = $dbh->prepare($sql);
   $sth->execute();
@@ -290,12 +313,24 @@ sub write_events {
     #die "No events found\n;";
   }
 
+  my %symbol = (
+    identical     => "~",
+    change_gene   => "=",
+    gain_iso_form => "=+",
+    lost_iso_form => "=-",
+    new_gene      => "+",
+    merge_gene    => ">",
+    split_gene    => "<",
+  );
+
   foreach my $row (@{$events_ref}) {
-    my ($vb_gene_id, $cap_gene_id, $event) = @{$row};
+    my ($vb_gene_id, $cap_gene_id, $event, $vb_biotype, $cap_biotype) = @{$row};
+
     if ( (defined($vb_gene_id) and exists $duplicate_ids{$vb_gene_id})
       or (defined($cap_gene_id) and exists $duplicate_ids{$cap_gene_id}))
     {
-      print $file_handle "Duplicate\t$vb_gene_id~$cap_gene_id\n//\n";
+      my @line = ("Duplicate", $vb_gene_id . $symbol{identical} . $cap_gene_id, "");
+      print $file_handle join("\t", @line) . "\n//\n";
     } elsif ($event eq 'new_gene') {
       $duplicate_ids{$cap_gene_id} = 1;
     } else {
@@ -303,30 +338,31 @@ sub write_events {
       $duplicate_ids{$cap_gene_id} = 1;
     }
 
-    if ($event eq 'identical') {
-      print $file_handle "Ge\t$vb_gene_id~$cap_gene_id\n//\n";
-    }
+    my @line = ("Ge");
+    $vb_gene_id //= "";
+    $cap_gene_id //= "";
+    $vb_biotype //= "";
+    $cap_biotype //= "";
+    my $relation_ids = $vb_gene_id . $symbol{$event} . $cap_gene_id;
+    my $biotypes = $vb_biotype . $symbol{$event} . $cap_biotype;
+    push @line, $relation_ids;
+    push @line, $biotypes;
 
     if ($event eq 'change_gene') {
-      print $file_handle "Ge\t$vb_gene_id=$cap_gene_id\n//\n";
       $event_change_count++;
     } elsif ($event eq 'gain_iso_form') {
-      print $file_handle "Ge\t$vb_gene_id=+$cap_gene_id\n//\n";
       $event_iso_gain_count++;
     } elsif ($event eq 'lost_iso_form') {
-      print $file_handle "Ge\t$vb_gene_id=-$cap_gene_id\n//\n";
       $event_iso_lost_count++;
     } elsif ($event eq 'new_gene') {
-      print $file_handle "Ge\t+$cap_gene_id\n//\n";
       $event_new_count++;
     } elsif ($event eq "merge_gene") {
-      print $file_handle "Ge\t$vb_gene_id>$cap_gene_id\n//\n";
       $event_merge_count++;
     } elsif ($event eq "split_gene") {
-      print $file_handle "Ge\t$vb_gene_id<$cap_gene_id\n//\n";
       $event_split_count++;
     }
 
+    print $file_handle join("\t", @line) . "\n//\n";
   }
 
 }
@@ -369,6 +405,8 @@ sub write_gff_to_load {
     $load_total_count++;
   }
 
+  my $errorLog  = Log::Log4perl->get_logger("errorlogger");
+
   my $cap_gff = "$gff_file_dir/cap.gff";
   open my $cap_gff_fh,  '<', $cap_gff                         or die "can't open $cap_gff\n";
   open my $load_gff_fh, '>', "$gff_file_dir/genes_2_load.gff" or die "can't open gene_2_load.gff\n";
@@ -387,26 +425,36 @@ sub write_gff_to_load {
     next unless $biotype;
 
     my %attrib = parse_attribs($columns[8]);
-    my $ID     = $attrib{ID};
+    my $ID     = $attrib{ID} // "(NA)";
     my $parent = $attrib{Parent};
 
     $columns[1] = 'VectorBase';
     my $vb_gff_line = join("\t", @columns) . "\n";
 
-    if ($biotype eq 'gene') {
+    if (exists $BIOTYPE{gene}{$biotype}) {
       if (exists $loaded_hash{$ID}) {
         print $load_gff_fh $vb_gff_line;
         $gff_gene_count++;
+      } else {
+        $errorLog->info("No hash for $biotype $ID");
       }
-    } elsif ($biotype eq 'mRNA') {
+    } elsif (exists $BIOTYPE{transcript}{$biotype}) {
       if (exists $loaded_hash{$parent}) {
         $parents_hash{$ID} = 1;
         print $load_gff_fh $vb_gff_line;
+      } else {
+        $errorLog->info("No parent for $biotype $ID");
       }
-    } elsif ($biotype eq 'exon' or $biotype eq 'CDS') {
+    } elsif (exists $BIOTYPE{sub_feature}{$biotype}) {
       if (exists $parents_hash{$parent}) {
         print $load_gff_fh $vb_gff_line;
+      } else {
+        $errorLog->info("No parent for $biotype $ID");
       }
+    } elsif (exists $BIOTYPE{skip}{$biotype}) {
+      next;
+    } else {
+      $errorLog->info("Skip $biotype $ID in final GFF: not supported");
     }
   }
 }

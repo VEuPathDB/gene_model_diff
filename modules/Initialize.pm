@@ -57,6 +57,7 @@ use Carp qw(cluck carp croak confess);
 use Log::Log4perl;
 use Digest::MD5 qw(md5_hex);
 use Validate;
+use GeneModel qw(%BIOTYPE);
 
 use Bio::Seq;
 use Bio::SeqIO;
@@ -82,11 +83,11 @@ sub load_gene_set {
     $fasta_file, $dsn,    $user,            $pass,   $prot_fasta
   ) = @_;
   my %stats = (
-    obsolete           => 0,
-    not_finished       => 0,
-    not_validated      => 0,
+    obsolete           => [],
+    not_finished       => [],
+    not_validated      => [],
+    no_gene_model      => [],
     total_loaded       => 0,
-    no_gene_model      => 0,
     ok_gene_model      => 0,
     preloaded_features => 0,
     genes              => 0,
@@ -97,33 +98,40 @@ sub load_gene_set {
 
   $stats{preloaded_features} = _gff_load($gff_file, $fasta_file, $dsn, $user, $pass);
 
+  _check_biotypes($db);
+
   my @genes      = $db->get_features_by_type('gene');
   my @prot_genes = $db->get_features_by_type('protein_coding_gene');
+  my @pseudogenes = $db->get_features_by_type('pseudogene');
+  my $fingerprints = {};
 
   $stats{genes} = scalar(@genes);
-  @genes = (@genes, @prot_genes);
+  @genes = (@genes, @prot_genes, @pseudogenes);
   open my $validation_fh, '>>', $validation_file;
   foreach my $gene (@genes) {
-
     my %attb    = $gene->attributes;
     my $gene_id = $attb{load_id}->[0];
 
     # Exclude some gene models
     if ($source eq 'cap') {
       if (_gene_is_obsolete(\%attb)) {
-        $stats{obsolete}++;
+        $infoLog->info("Gene $gene_id is obsolete");
+        push @{$stats{obsolete}}, $gene_id;
         next;
       }
       if (not _gene_is_finished(\%attb)) {
-        $stats{not_finished}++;
+        $infoLog->info("Gene $gene_id is not finished");
+        push @{$stats{not_finished}}, $gene_id;
         next;
       }
     }
-    my $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins);
+    my $passed_validation = 1;
+    $passed_validation = Validate::validate_gene($gene, $config, $validation_fh, $proteins, $fingerprints);
 
     if ($source eq 'cap' and $passed_validation < 0) {
-      $stats{not_validated}++;
+      push @{$stats{not_validated}}, $gene_id;
       $infoLog->info("Gene $gene_id did not pass validation");
+      next;
     }
 
     my ($gene_model, $CDS_present) = _build_gene_model($gene);
@@ -136,13 +144,30 @@ sub load_gene_set {
         _insert_CDS($gene_model, $dbh, $source);
       }
     } else {
-      $stats{no_gene_model}++;
+      push @{$stats{no_gene_model}}, $gene_id;
     }
 
     $stats{total_loaded}++;
   }
 
   return \%stats;
+}
+
+sub _check_biotypes {
+  my ($db) = @_;
+
+  my %known_types = ();
+  for my $name (keys %BIOTYPE) {
+    %known_types = (%known_types, %{$BIOTYPE{$name}});
+  }
+  my @unsupported = ();
+  for my $biotype ($db->types) {
+    $biotype =~ s/:.+$//;
+    if (not exists $known_types{$biotype}) {
+      push @unsupported, $biotype;
+    }
+  }
+  die("Unknown biotypes: " . join(", ", @unsupported)) if @unsupported;
 }
 
 sub _load_proteins {
@@ -215,56 +240,81 @@ sub _build_gene_model {
   my $CDS_present = 0;
   $gene_model{gene_id}               = $attb{load_id}->[0];
   $gene_model{validation_error_code} = $attb{validation_error_code}->[0];
+  $gene_model{biotype} = $gene->type;
+  $gene_model{biotype} =~ s/:.+$//;
 
   my @mRNAs = $gene->get_SeqFeatures('mRNA');
-MRNA: foreach my $mRNA (@mRNAs) {
-    my %mRNA_model;
-    my %rna_attb                   = $mRNA->attributes;
-    my $mRNA_validation_error_code = $rna_attb{validation_error_code}->[0];
+  my @transcripts = $gene->get_SeqFeatures();
+  my %tr_biotypes = ();
 
-    $mRNA_model{mRNA_id}               = $rna_attb{load_id}->[0];
-    $mRNA_model{validation_error_code} = $mRNA_validation_error_code;
+  TRAN: foreach my $tr (@transcripts) {
+    my %tr_model;
+    my %rna_attb                   = $tr->attributes;
+    my $RNA_validation_error_code  = $rna_attb{validation_error_code}->[0];
 
-    my @CDS = $mRNA->get_SeqFeatures('CDS');
+    $tr_model{transcript_id}         = $rna_attb{load_id}->[0];
+    $tr_model{validation_error_code} = $RNA_validation_error_code;
+    $tr_model{biotype} = $tr->type;
+    $tr_model{biotype} =~ s/:.+$//;
+    $tr_biotypes{$tr_model{biotype}} = 1;
+
+    my @CDS = $tr->get_SeqFeatures('CDS');
     if (scalar(@CDS) > 0) {
       $CDS_present = 1;
-      my $CDS_sequence = get_CDS($mRNA, '');
+      my $CDS_sequence = get_CDS($tr, '');
       return if not $CDS_sequence;
 
-      my $prot_seq     = get_translation($CDS_sequence, $mRNA->strand);
+      my $prot_seq     = get_translation($CDS_sequence, $tr->strand);
       my $md5_checksum = md5_hex($prot_seq);
 
       my %cds_attb = $CDS[0]->attributes;
-      $mRNA_model{cds_start}        = $CDS[0]->start;
-      $mRNA_model{cds_end}          = $CDS[0]->end;
-      $mRNA_model{CDS_Parent_id}    = $cds_attb{parent_id}->[0];
-      $mRNA_model{CDS_md5_checksum} = $md5_checksum;
-      $mRNA_model{cds_error_code}   = $mRNA_validation_error_code;
+      $tr_model{cds_start}        = $CDS[0]->start;
+      $tr_model{cds_end}          = $CDS[0]->end;
+      $tr_model{CDS_Parent_id}    = $cds_attb{parent_id}->[0];
+      $tr_model{CDS_md5_checksum} = $md5_checksum;
+      $tr_model{cds_error_code}   = $RNA_validation_error_code;
     }
 
-    my @exons = $mRNA->get_SeqFeatures('exon');
+    my @exons = $tr->get_SeqFeatures('exon');
 
-    my $exon_number = 1;
-    foreach my $exon (@exons) {
-      my %exon_attb = $exon->attributes;
-      my %exon_model;
+    if (@exons) {
+      my $exon_number = 1;
+      foreach my $exon (@exons) {
+        my %exon_attb = $exon->attributes;
+        my %exon_model;
 
-      # Make unique exon id
-      if ($exon_attb{load_id}->[0]) {
-        $exon_model{exon_id} = $exon_attb{load_id}->[0];
-      } else {
-        $exon_model{exon_id} = $exon_attb{parent_id}->[0] . $exon_number;
-        $exon_number++;
+        # Make unique exon id
+        if ($exon_attb{load_id}->[0]) {
+          $exon_model{exon_id} = $exon_attb{load_id}->[0];
+        } else {
+          $exon_model{exon_id} = $exon_attb{parent_id}->[0] . $exon_number;
+          $exon_number++;
+        }
+
+        $exon_model{scaffold} = $exon->seq_id;
+        $exon_model{strand}   = $exon->strand;
+        $exon_model{start}    = $exon->start;
+        $exon_model{end}      = $exon->end;
+
+        push @{$tr_model{exon}}, \%exon_model;
       }
+    } else {
+      # No exons? Create one from the transcript
+      my %exon_model = ();
+      $exon_model{exon_id} = $tr_model{transcript_id} . "-exon";
+      $exon_model{scaffold} = $tr->seq_id;
+      $exon_model{strand}   = $tr->strand;
+      $exon_model{start}    = $tr->start;
+      $exon_model{end}      = $tr->end;
 
-      $exon_model{scaffold} = $exon->seq_id;
-      $exon_model{strand}   = $exon->strand;
-      $exon_model{start}    = $exon->start;
-      $exon_model{end}      = $exon->end;
-
-      push @{$mRNA_model{exon}}, \%exon_model;
+      push @{$tr_model{exon}}, \%exon_model;
     }
-    push @{$gene_model{mRNA}}, \%mRNA_model;
+    push @{$gene_model{transcript}}, \%tr_model;
+  }
+
+  if ($gene_model{biotype} eq 'gene') {
+    my $gene_biotype = join(",",(sort keys %tr_biotypes));
+    $gene_model{biotype} = $gene_biotype;
   }
 
   return (\%gene_model, $CDS_present);
@@ -277,6 +327,7 @@ sub get_CDS {
   my $strand  = $mrna_obj->strand;
 
   my @CDS  = $mrna_obj->get_SeqFeatures('CDS');
+  return if not @CDS;
   my %attb = $CDS[0]->attributes;
 
   #only expects one CDS per mRNA, code will break if more.
@@ -357,6 +408,8 @@ sub get_CDS {
 sub get_translation {
   my ($CDS_sequence, $strand) = @_;
 
+  return if not $CDS_sequence;
+
   my $seqobj = Bio::Seq->new(-seq => $CDS_sequence);
   if ($strand eq '-' or $strand eq '-1') {
     $seqobj = $seqobj->revcom();
@@ -384,8 +437,8 @@ sub _insert_exon {
 					 )
 					 select ?,?,?,?,?,?;";
   my $sth = $dbh->prepare($insert_sql);
-  foreach my $mRNA (@{$hash->{mRNA}}) {
-    foreach my $exon (@{$mRNA->{exon}}) {
+  foreach my $transcript (@{$hash->{transcript}}) {
+    foreach my $exon (@{$transcript->{exon}}) {
       $sth->bind_param(1, $exon->{exon_id});
       $sth->bind_param(2, $source);
       $sth->bind_param(3, $exon->{scaffold});
@@ -411,13 +464,13 @@ sub _insert_CDS {
 					 select ?,?,?,?,?;";
 
   my $sth = $dbh->prepare($insert_sql);
-  foreach my $mRNA (@{$hash->{mRNA}}) {
+  foreach my $transcript (@{$hash->{transcript}}) {
 
-    $sth->bind_param(1, $mRNA->{CDS_Parent_id});
-    $sth->bind_param(2, $mRNA->{cds_start});
-    $sth->bind_param(3, $mRNA->{cds_end});
-    $sth->bind_param(4, $mRNA->{CDS_md5_checksum});
-    $sth->bind_param(5, $mRNA->{cds_error_code});
+    $sth->bind_param(1, $transcript->{CDS_Parent_id});
+    $sth->bind_param(2, $transcript->{cds_start});
+    $sth->bind_param(3, $transcript->{cds_end});
+    $sth->bind_param(4, $transcript->{CDS_md5_checksum});
+    $sth->bind_param(5, $transcript->{cds_error_code});
 
     $sth->execute();
   }
@@ -430,19 +483,20 @@ sub _insert_gene_model {
 										transcript_id,
 										gene_id,
 										source,
-										error_code
+										error_code,
+                    biotype
 									   )
-							select ?,?,?,?,?;";
+							select ?,?,?,?,?,?;";
   my $sth     = $dbh->prepare($insert_sql);
   my $gene_id = $hash->{gene_id};
-  foreach my $mRNA (@{$hash->{mRNA}}) {
-    foreach my $exon (@{$mRNA->{exon}}) {
-
+  foreach my $transcript (@{$hash->{transcript}}) {
+    foreach my $exon (@{$transcript->{exon}}) {
       $sth->bind_param(1, $exon->{exon_id});
-      $sth->bind_param(2, $mRNA->{mRNA_id});
+      $sth->bind_param(2, $transcript->{transcript_id});
       $sth->bind_param(3, $hash->{gene_id});
       $sth->bind_param(4, $source);
       $sth->bind_param(5, $hash->{validation_error_code});
+      $sth->bind_param(6, $hash->{biotype});
 
       $sth->execute();
     }

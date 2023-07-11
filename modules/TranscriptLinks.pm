@@ -76,9 +76,9 @@ sub work_out_transcript_links {
     my $transcript_pairs = _make_transcript_pairs($dbh, $gene_cluster);
     foreach my $transcript_pair (@{$transcript_pairs}) {
       my $ranks = _rank_transcript_pair($dbh, $transcript_pair);
-      my ($cap_id, $vb_id) = split /:/, $transcript_pair;
+      my ($cap_id, $vb_id) = @$transcript_pair;
       unless ($ranks) {
-        $errorLog->error("No rank was returned for transcript pair: $transcript_pair");
+        $errorLog->error("No rank was returned for transcript pair: @$transcript_pair");
         next;
       }
       foreach my $group (keys %{$ranks}) {
@@ -111,7 +111,7 @@ sub _make_transcript_pairs {
 
   foreach my $cap_id (@cap) {
     foreach my $vb_id (@vb) {
-      push @pairs, "$cap_id:$vb_id";
+      push @pairs, [$cap_id, $vb_id];
     }
   }
   return \@pairs;
@@ -140,7 +140,7 @@ sub _rank_transcript_pair {
     CDS_error   => 'CDS_error'
   );
   my %maptype_count;
-  my ($cap_transcript_id, $vb_transcript_id) = split /:/, $transcript_pair;
+  my ($cap_transcript_id, $vb_transcript_id) = @$transcript_pair;
   my $cap_exons = GeneModel::get_exons_by_transcript_id($dbh, $cap_transcript_id, 'cap');
   my $vb_exons  = GeneModel::get_exons_by_transcript_id($dbh, $vb_transcript_id,  'vb');
   my ($exon_maptype_array, $no_exon_maptype_array) = _compare_exons($dbh, $cap_exons, $vb_exons);
@@ -201,15 +201,21 @@ sub _compare_exons {
 
 sub _compare_cds {
   my ($dbh, $cap_transcript_id, $vb_transcript_id) = @_;
-  my ($cap_cds_checksum) = CDS::get_cds_checksum_by_parent_id($dbh, $cap_transcript_id);
+
   my ($cap_error_code)   = CDS::get_cds_error_code_by_parent_id($dbh, $cap_transcript_id);
-  my ($vb_cds_checksum)  = CDS::get_cds_checksum_by_parent_id($dbh, $vb_transcript_id);
   my ($vb_error_code)    = CDS::get_cds_error_code_by_parent_id($dbh, $vb_transcript_id);
+  
+  # In case one of those does not have a CDS (e.g. pseudogene <-> protein_coding_gene)
+  if (not defined $cap_error_code or not defined $vb_error_code) {
+    return 0;
+  }
 
   if ($cap_error_code > $vb_error_code) {
     return 'CDS_error';
   }
 
+  my ($cap_cds_checksum) = CDS::get_cds_checksum_by_parent_id($dbh, $cap_transcript_id);
+  my ($vb_cds_checksum)  = CDS::get_cds_checksum_by_parent_id($dbh, $vb_transcript_id);
   if ($cap_cds_checksum ne $vb_cds_checksum) {
     return 'CDS_change';
   } else {

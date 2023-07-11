@@ -139,7 +139,12 @@ sub update_maptype {
 sub get_gene_mappings_by_maptype {
   my ($dbh, $maptype) = @_;
 
-  my $sql       = "select cap_gene_id,vb_gene_id from gene_mappings where map_type = \'$maptype\';";
+  my $sql       = "select cap_gene_id, vb_gene_id, cap.biotype AS cap_biotype, vb.biotype AS vb_biotype"
+                ." from gene_mappings"
+                ." LEFT JOIN gene_model cap ON(cap_gene_id=cap.gene_id)"
+                ." LEFT JOIN gene_model vb ON(vb_gene_id=vb.gene_id)"
+                ." where map_type = \'$maptype\'"
+                ." GROUP BY cap.gene_id, vb.gene_id;";
   my $array_ref = _submit_sql($dbh, $sql);
   return $array_ref;
 
@@ -221,7 +226,7 @@ sub _identical_genes {
     }
   }
 
-  _insert_gene_mappings($dbh, "$cap_gene_id:$vb_gene_id", 'identical');
+  _insert_gene_mappings($dbh, [$cap_gene_id, $vb_gene_id], 'identical');
   return 1;
 
 }
@@ -262,7 +267,7 @@ sub _lost_iso_form {
     }
   }
 
-  _insert_gene_mappings($dbh, "$cap_gene_id:$vb_gene_id", 'lost_iso_form');
+  _insert_gene_mappings($dbh, [$cap_gene_id, $vb_gene_id], 'lost_iso_form');
 }
 
 sub _gain_iso_form {
@@ -301,7 +306,7 @@ sub _gain_iso_form {
     }
   }
 
-  _insert_gene_mappings($dbh, "$cap_gene_id:$vb_gene_id", 'gain_iso_form');
+  _insert_gene_mappings($dbh, [$cap_gene_id, $vb_gene_id], 'gain_iso_form');
 }
 
 sub _exon_change {
@@ -345,13 +350,13 @@ sub _exon_change {
       croak("Source not known");
     }
   }
-  _insert_gene_mappings($dbh, "$cap_gene_id:$vb_gene_id", $final_maptype);
+  _insert_gene_mappings($dbh, [$cap_gene_id, $vb_gene_id], $final_maptype);
 }
 
 sub _new_gene {
   my ($dbh, $cluster_id) = @_;
   my ($cap_gene) = @{GeneClusters::get_gene_cluster_by_id($dbh, $cluster_id)->[0]};
-  _insert_gene_mappings($dbh, "$cap_gene:", 'new');
+  _insert_gene_mappings($dbh, [$cap_gene, undef], 'new');
 }
 
 sub _split_gene {
@@ -390,7 +395,7 @@ sub _split_gene {
   }
 
   foreach my $cap_gene_id (@cap_gene_id) {
-    _insert_gene_mappings($dbh, "$cap_gene_id:$vb_gene_id", 'split');
+    _insert_gene_mappings($dbh, [$cap_gene_id, $vb_gene_id], 'split');
   }
 }
 
@@ -430,7 +435,7 @@ sub _merge_gene {
   }
 
   foreach my $vb_gene_id (@vb_gene_id) {
-    _insert_gene_mappings($dbh, "$cap_gene_id:$vb_gene_id", 'merge');
+    _insert_gene_mappings($dbh, [$cap_gene_id, $vb_gene_id], 'merge');
   }
 }
 
@@ -462,7 +467,7 @@ sub _complex_split_merge_gene {
       if ($gene_lookup{vb}{$gene_id}{count} > 1) {
         foreach my $cap_gene_id (@{$gene_lookup{vb}{$gene_id}{genes}}) {
           if (!exists $uniq_gene_mappings{split}{"$cap_gene_id:$gene_id"}) {
-            _insert_gene_mappings($dbh, "$cap_gene_id:$gene_id", 'split');
+            _insert_gene_mappings($dbh, [$cap_gene_id, $gene_id], 'split');
             $uniq_gene_mappings{split}{"$cap_gene_id:$gene_id"} = 1;
           }
         }
@@ -473,7 +478,7 @@ sub _complex_split_merge_gene {
       if ($gene_lookup{cap}{$gene_id}{count} > 1) {
         foreach my $vb_gene_id (@{$gene_lookup{cap}{$gene_id}{genes}}) {
           if (!exists $uniq_gene_mappings{merge}{"$gene_id:$vb_gene_id"}) {
-            _insert_gene_mappings($dbh, "$gene_id:$vb_gene_id", 'merge');
+            _insert_gene_mappings($dbh, [$gene_id, $vb_gene_id], 'merge');
             $uniq_gene_mappings{merge}{"$gene_id:$vb_gene_id"} = 1;
           }
         }
@@ -485,7 +490,7 @@ sub _complex_split_merge_gene {
 sub _insert_gene_mappings {
   my ($dbh, $gene_ids, $map_type) = @_;
   my $insert_gene_mappings_sth = $dbh->prepare(get_sql('insert_gene_mappings'));
-  my ($cap_gene_id, $vb_gene_id) = split /:/, $gene_ids;
+  my ($cap_gene_id, $vb_gene_id) = @$gene_ids;
 
   if ($map_type eq 'new') {
     $vb_gene_id = undef;
