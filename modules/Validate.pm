@@ -217,11 +217,11 @@ sub validate_gene {
       my $CDS_ID = $attb{load_id}->[0];
       my $prot_seq = "";
       unless ($CDS_sequence) {
-        $errorLog->error("No CDS for $$CDS_ID");
+        $errorLog->error("No CDS for $CDS_ID");
       } else {
         $prot_seq = Initialize::get_translation($CDS_sequence, $mRNA_hash{strand});
         unless ($prot_seq) {
-          $errorLog->error("No translation for $$CDS_ID");
+          $errorLog->error("No translation for $CDS_ID");
         }
       }
 
