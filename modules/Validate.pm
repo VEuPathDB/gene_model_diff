@@ -215,7 +215,6 @@ sub validate_gene {
       return if not @CDS;
       my %attb = $CDS[0]->attributes;
       my $CDS_ID = $attb{load_id}->[0];
-      print Dumper $CDS_ID;
       my $prot_seq = "";
       unless ($CDS_sequence) {
         $errorLog->error("No CDS for $$CDS_ID");
