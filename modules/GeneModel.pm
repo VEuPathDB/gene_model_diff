@@ -97,6 +97,9 @@ my %known_biotypes = (
     repeat_region
     five_prime_UTR
     three_prime_UTR
+    deletion_artifact
+    insertion_artifact
+    substitution_artifact
   )]
 );
 
