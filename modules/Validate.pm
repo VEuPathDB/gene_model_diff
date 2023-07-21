@@ -105,7 +105,10 @@ sub validate_gene {
     my %mRNA_hash;
     my %mRNA_attb              = $mRNA->attributes;
     my $mRNA_id                = $mRNA_attb{load_id}->[0];
-    my $prot_fasta_seq         = $proteins->{$mRNA_id} ? $proteins->{$mRNA_id} . "*" : "";
+    my @cds = $mRNA->get_SeqFeatures('CDS');
+    my %cds_attb = $cds[0]->attributes;
+    my $cds_id = $cds_attb{load_id}->[0];
+    my $prot_fasta_seq         = $proteins->{$cds_id} ? $proteins->{$cds_id} . "*" : "";
     my $mRNA_validation_status = 0;
 
     my $NO_ATG        = 0;
@@ -220,11 +223,11 @@ sub validate_gene {
       my $CDS_sequence = Initialize::get_CDS($mRNA, $validation_fh);
       my $prot_seq = "";
       unless ($CDS_sequence) {
-        $errorLog->error("No CDS for $mRNA_ID");
+        $errorLog->error("No CDS for $cds_id");
       } else {
         $prot_seq = Initialize::get_translation($CDS_sequence, $mRNA_hash{strand});
         unless ($prot_seq) {
-          $errorLog->error("No translation for $mRNA_ID");
+          $errorLog->error("No translation for $cds_id");
         }
       }
 
@@ -242,7 +245,7 @@ sub validate_gene {
       }
 
       if ($sequence_check ne 'passed' and $sequence_check ne 'no_sequence') {
-        $validation_string .= "mRNA:$mRNA_ID";
+        $validation_string .= "CDS:$cds_id";
         $validation_string .= "$validation_text;";
         $errorLog->error($validation_string);
         my ($start_flag, $stop_flag, $internal_stop_count) =
