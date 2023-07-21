@@ -112,6 +112,13 @@ sub validate_gene {
     my $NO_STOP       = 0;
     my $INTERNAL_STOP = 0;
 
+    # Check that the mRNA has no more than 1 CDS
+    my $cds_ids_count = _check_cds_count($mRNA);
+    if ($cds_ids_count > 1) {
+        $validation_string .= "mRNA:$mRNA_id|Too many CDS ids: $cds_ids_count;";
+        $mRNA_validation_status += $validation_error_code{GFF_mRNA};
+    }
+
     # Check CDS fingerprints (within all genes)
     push @gene_cds_fingerprints, _get_mRNA_fingerprint($mRNA, ['CDS']);
 
@@ -364,6 +371,20 @@ sub validate_gene {
   }
   $gene->add_tag_value('validation_error_code' => $gene_validation_status);
   return $gene_validation_status;
+}
+
+sub _check_cds_count {
+  # Return the number of distinct CDS ids for this mRNA
+  my ($mRNA) = @_;
+
+  my %cds_ids = ();
+  for my $cds ($mRNA->get_SeqFeatures('CDS')) {
+    my %cds_attb = $cds->attributes;
+    my $cds_id = $cds_attb{load_id}->[0];
+    $cds_ids{$cds_id} = 1;
+  }
+
+  return scalar %cds_ids;
 }
 
 sub _get_mRNA_fingerprint {
