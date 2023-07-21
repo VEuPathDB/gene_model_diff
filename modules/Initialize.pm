@@ -332,9 +332,7 @@ sub get_CDS {
 
   #only expects one CDS per mRNA, code will break if more.
   if (scalar @CDS > 1) {
-    warn(
-"more than one cds for mrna, only expects one cds per mrna, code will break if more. $attb{load_id}->[0]"
-    );
+    $infoLog->info("more than one cds for mRNA, only expects one cds per mrna, code will break if more. $attb{load_id}->[0]");
     return;
   }
   my $CDS_start = $CDS[0]->start;
