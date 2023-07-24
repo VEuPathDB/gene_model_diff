@@ -146,6 +146,41 @@ sub get_changed_genes {
   return $gene_count;
 }
 
+=head2 
+
+ Title: get_broken_genes   	
+ Usage: AnnotationEvents::get_broken_genes($dbh)   	
+ Function: Gets CDS_error from the gene_mapping table and inserts them as broken_gene in to the gene_events table  	
+ Returns: Count of broken genes 
+ Args: Database handle object	     
+=cut
+
+sub get_broken_genes {
+  my ($dbh) = @_;
+
+  my $gene_count              = 0;
+  my $insert_sth = $dbh->prepare(get_sql('gene_events'));
+
+  my @maptypes = qw(CDS_error);
+  my @changed_genes;
+
+  foreach my $maptype (@maptypes) {
+    push @changed_genes, @{GeneMapping::get_gene_mappings_by_maptype($dbh, $maptype);};
+  }
+
+  foreach my $row (@changed_genes) {
+    my $cap_gene_id = $row->[0];
+    my $vb_gene_id  = $row->[1];
+    my $cap_biotype = $row->[2];
+    my $vb_biotype = $row->[3];
+    my $event_name = "broken_gene";
+    $insert_sth->execute($vb_gene_id, $cap_gene_id, $event_name, $vb_biotype, $cap_biotype);
+    $gene_count++;
+  }
+
+  return $gene_count;
+}
+
 =head2
  Title: get_lost_iso_form   	
  Usage: AnnotationEvents::get_lost_iso_form($dbh)   	

@@ -70,6 +70,7 @@ use GeneModel qw(%BIOTYPE);
 
 my $event_new_count;
 my $event_change_count;
+my $event_broken_count;
 my $event_iso_gain_count;
 my $event_iso_lost_count;
 my $event_merge_count;
@@ -81,6 +82,7 @@ my $gff_gene_count;
 my $identical_gene_count;
 my $new_gene_count;
 my $changed_gene_count;
+my $broken_gene_count;
 my $iso_lost_gene_count;
 my $iso_gain_gene_count;
 my @merged_gene_counts;
@@ -119,6 +121,7 @@ sub run_species {
 
   $event_new_count      = 0;
   $event_change_count   = 0;
+  $event_broken_count   = 0;
   $event_iso_gain_count = 0;
   $event_iso_lost_count = 0;
   $event_merge_count    = 0;
@@ -289,6 +292,7 @@ sub get_events {
   $identical_gene_count = AnnotationEvents::get_identical_gene($dbh);
   $new_gene_count       = AnnotationEvents::get_new_gene($dbh);
   $changed_gene_count   = AnnotationEvents::get_changed_genes($dbh);
+  $broken_gene_count   = AnnotationEvents::get_broken_genes($dbh);
   $iso_gain_gene_count  = AnnotationEvents::get_gain_iso_form($dbh);
   $iso_lost_gene_count  = AnnotationEvents::get_lost_iso_form($dbh);
   @merged_gene_counts   = AnnotationEvents::get_merge($dbh);
@@ -321,6 +325,7 @@ sub write_events {
     new_gene      => "+",
     merge_gene    => ">",
     split_gene    => "<",
+    broken_gene   => "=!",
   );
 
   foreach my $row (@{$events_ref}) {
@@ -350,6 +355,8 @@ sub write_events {
 
     if ($event eq 'change_gene') {
       $event_change_count++;
+    } elsif ($event eq 'broken_gene') {
+      $event_broken_count++;
     } elsif ($event eq 'gain_iso_form') {
       $event_iso_gain_count++;
     } elsif ($event eq 'lost_iso_form') {
@@ -491,6 +498,7 @@ sub write_summary_counts {
 "Merge gene events:\t$event_merge_count ($merged_gene_counts[0],$merged_gene_counts[1],$merged_gene_counts[2])\n";
   print $file_fh
 "Split gene events:\t$event_split_count ($split_gene_counts[0],$split_gene_counts[1],$split_gene_counts[2])\n";
+  print $file_fh "Broken gene events:\t$event_broken_count ($broken_gene_count)\n";
   print $file_fh "Total genes deleted:\t$delete_total_count\n";
   print $file_fh "Total genes loaded:\t$load_total_count\n";
   print $file_fh "GFF gene count:\t$gff_gene_count\n";
